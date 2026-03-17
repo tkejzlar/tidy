@@ -12,12 +12,12 @@ public final class ScoringEngine: Sendable {
         self.heuristicsEngine = heuristicsEngine
     }
 
-    public func route(_ candidate: FileCandidate) throws -> RoutingDecision? {
+    public func route(_ candidate: FileCandidate) async throws -> RoutingDecision? {
         let moveCount = try knowledgeBase.totalMoveCount()
         let w = Self.weights(moveCount: moveCount)
 
-        let patternScores = try patternMatcher.score(candidate)
-        let heuristicScores = try heuristicsEngine.score(candidate)
+        let patternScores = try await patternMatcher.score(candidate)
+        let heuristicScores = try await heuristicsEngine.score(candidate)
 
         var allDestinations: Set<String> = []
         for s in patternScores { allDestinations.insert(s.path) }

@@ -14,7 +14,7 @@ public struct PatternMatcher: Sendable {
         self.knowledgeBase = knowledgeBase
     }
 
-    public func score(_ candidate: FileCandidate) throws -> [ScoredDestination] {
+    public func score(_ candidate: FileCandidate) async throws -> [ScoredDestination] {
         let allPatterns = try knowledgeBase.allPatterns()
         guard !allPatterns.isEmpty else { return [] }
 

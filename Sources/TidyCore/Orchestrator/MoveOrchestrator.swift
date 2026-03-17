@@ -31,11 +31,11 @@ public actor MoveOrchestrator {
     public func setAutoMoveThreshold(_ threshold: Int) { autoMoveThreshold = threshold }
     public func setSuggestThreshold(_ threshold: Int) { suggestThreshold = threshold }
 
-    public func processFile(_ candidate: FileCandidate) throws -> OrchestratorEvent? {
+    public func processFile(_ candidate: FileCandidate) async throws -> OrchestratorEvent? {
         if ignoreFilter.shouldIgnore(filename: candidate.filename) { return nil }
         if isPaused { return nil }
 
-        guard let decision = try scoringEngine.route(candidate) else {
+        guard let decision = try await scoringEngine.route(candidate) else {
             return .newFile(candidate: candidate)
         }
 

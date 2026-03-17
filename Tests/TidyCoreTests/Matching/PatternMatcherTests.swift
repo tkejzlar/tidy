@@ -5,16 +5,16 @@ import Testing
 @Suite("PatternMatcher")
 struct PatternMatcherTests {
     @Test("returns empty when no patterns exist")
-    func empty() throws {
+    func empty() async throws {
         let kb = try KnowledgeBase.inMemory()
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/test.pdf", fileSize: 1000)
-        let results = try matcher.score(candidate)
+        let results = try await matcher.score(candidate)
         #expect(results.isEmpty)
     }
 
     @Test("matches by extension")
-    func extensionMatch() throws {
+    func extensionMatch() async throws {
         let kb = try KnowledgeBase.inMemory()
         try kb.recordPattern(
             extension: "pdf", filenameTokens: ["invoice"],
@@ -23,13 +23,13 @@ struct PatternMatcherTests {
         )
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/invoice-april.pdf", fileSize: 50_000)
-        let results = try matcher.score(candidate)
+        let results = try await matcher.score(candidate)
         #expect(!results.isEmpty)
         #expect(results[0].path == "~/Documents/Finance")
     }
 
     @Test("higher weight patterns score higher")
-    func weightedScoring() throws {
+    func weightedScoring() async throws {
         let kb = try KnowledgeBase.inMemory()
         try kb.recordPattern(
             extension: "pdf", filenameTokens: ["report"],
@@ -43,13 +43,13 @@ struct PatternMatcherTests {
         )
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/report-q1.pdf", fileSize: 2_000_000)
-        let results = try matcher.score(candidate)
+        let results = try await matcher.score(candidate)
         #expect(results.count == 2)
         #expect(results[0].path == "~/Documents/Work")
     }
 
     @Test("token overlap increases score")
-    func tokenOverlap() throws {
+    func tokenOverlap() async throws {
         let kb = try KnowledgeBase.inMemory()
         try kb.recordPattern(
             extension: "pdf", filenameTokens: ["invoice", "march"],
@@ -63,7 +63,7 @@ struct PatternMatcherTests {
         )
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/invoice-april.pdf", fileSize: 30_000)
-        let results = try matcher.score(candidate)
+        let results = try await matcher.score(candidate)
         #expect(results[0].path == "~/Documents/Finance")
     }
 }

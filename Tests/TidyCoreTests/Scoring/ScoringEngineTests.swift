@@ -24,7 +24,7 @@ struct ScoringEngineTests {
     }
 
     @Test("combines pattern matcher and heuristics into a routing decision")
-    func layerCombination() throws {
+    func layerCombination() async throws {
         let kb = try KnowledgeBase.inMemory()
         for i in 1...50 {
             try kb.recordPattern(
@@ -40,19 +40,19 @@ struct ScoringEngineTests {
         let heuristics = HeuristicsEngine(affinities: [], clusters: [])
         let engine = try ScoringEngine(knowledgeBase: kb, heuristicsEngine: heuristics)
         let candidate = FileCandidate(path: "/Downloads/report-q2.pdf", fileSize: 2_000_000)
-        let decision = try engine.route(candidate)
+        let decision = try await engine.route(candidate)
         #expect(decision != nil)
         #expect(decision!.destination == "~/Documents/Reports")
         #expect(decision!.confidence > 0)
     }
 
     @Test("returns nil when no layer has suggestions")
-    func noSuggestions() throws {
+    func noSuggestions() async throws {
         let kb = try KnowledgeBase.inMemory()
         let heuristics = HeuristicsEngine(affinities: [], clusters: [])
         let engine = try ScoringEngine(knowledgeBase: kb, heuristicsEngine: heuristics)
         let candidate = FileCandidate(path: "/Downloads/mystery-file.xyz", fileSize: 100)
-        let decision = try engine.route(candidate)
+        let decision = try await engine.route(candidate)
         #expect(decision == nil)
     }
 

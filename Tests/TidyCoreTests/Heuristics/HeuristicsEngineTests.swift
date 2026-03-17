@@ -4,7 +4,7 @@ import Testing
 @Suite("HeuristicsEngine")
 struct HeuristicsEngineTests {
     @Test("screenshots route with 100% confidence via filename")
-    func screenshotByFilename() throws {
+    func screenshotByFilename() async throws {
         let engine = HeuristicsEngine(
             affinities: [], clusters: [],
             screenshotDestination: "~/Screenshots"
@@ -13,14 +13,14 @@ struct HeuristicsEngineTests {
             path: "/Downloads/Screenshot 2026-03-17 at 10.42.31.png",
             fileSize: 500_000
         )
-        let results = try engine.score(candidate)
+        let results = try await engine.score(candidate)
         #expect(results.count == 1)
         #expect(results[0].path == "~/Screenshots")
         #expect(results[0].confidence == 1.0)
     }
 
     @Test("screenshots route with 100% confidence via metadata flag")
-    func screenshotByMetadata() throws {
+    func screenshotByMetadata() async throws {
         let engine = HeuristicsEngine(
             affinities: [], clusters: [],
             screenshotDestination: "~/Screenshots"
@@ -35,13 +35,13 @@ struct HeuristicsEngineTests {
             fileSize: 500_000,
             metadata: metadata
         )
-        let results = try engine.score(candidate)
+        let results = try await engine.score(candidate)
         #expect(results.count == 1)
         #expect(results[0].confidence == 1.0)
     }
 
     @Test("installers route with 100% confidence")
-    func installer() throws {
+    func installer() async throws {
         let engine = HeuristicsEngine(
             affinities: [], clusters: [],
             installerDestination: "~/Installers"
@@ -49,14 +49,14 @@ struct HeuristicsEngineTests {
         let candidate = FileCandidate(
             path: "/Downloads/Chrome.dmg", fileSize: 100_000_000
         )
-        let results = try engine.score(candidate)
+        let results = try await engine.score(candidate)
         #expect(results.count == 1)
         #expect(results[0].path == "~/Installers")
         #expect(results[0].confidence == 1.0)
     }
 
     @Test("extension affinity scores reach suggest tier for 20+ files")
-    func extensionAffinityReachesSuggestTier() throws {
+    func extensionAffinityReachesSuggestTier() async throws {
         let affinities = [
             ExtensionAffinity(folderPath: "~/Documents/PDFs", fileExtension: "pdf", fileCount: 25)
         ]
@@ -64,7 +64,7 @@ struct HeuristicsEngineTests {
         let candidate = FileCandidate(
             path: "/Downloads/report.pdf", fileSize: 1_000_000
         )
-        let results = try engine.score(candidate)
+        let results = try await engine.score(candidate)
         #expect(!results.isEmpty)
         let pdfResult = results.first { $0.path == "~/Documents/PDFs" }
         #expect(pdfResult != nil)
@@ -72,7 +72,7 @@ struct HeuristicsEngineTests {
     }
 
     @Test("screenshot takes priority over extension affinity")
-    func screenshotPriority() throws {
+    func screenshotPriority() async throws {
         let affinities = [
             ExtensionAffinity(folderPath: "~/Photos", fileExtension: "png", fileCount: 100)
         ]
@@ -84,17 +84,17 @@ struct HeuristicsEngineTests {
             path: "/Downloads/Screenshot 2026-03-17 at 10.42.31.png",
             fileSize: 500_000
         )
-        let results = try engine.score(candidate)
+        let results = try await engine.score(candidate)
         #expect(results[0].path == "~/Screenshots")
     }
 
     @Test("returns empty for unknown file types with no affinities")
-    func noMatch() throws {
+    func noMatch() async throws {
         let engine = HeuristicsEngine(affinities: [], clusters: [])
         let candidate = FileCandidate(
             path: "/Downloads/mystery.xyz", fileSize: 100
         )
-        let results = try engine.score(candidate)
+        let results = try await engine.score(candidate)
         #expect(results.isEmpty)
     }
 }
