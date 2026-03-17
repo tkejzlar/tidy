@@ -134,4 +134,21 @@ struct ScoringEngineTests {
         let decision = try await engine.route(candidate)
         #expect(decision != nil)
     }
+
+    @Test("pinned rules override all layers with 100% confidence")
+    func pinnedRuleOverride() async throws {
+        let kb = try KnowledgeBase.inMemory()
+        let heuristics = HeuristicsEngine(affinities: [], clusters: [])
+        let pinnedRules = PinnedRulesManager(rules: [
+            PinnedRule(fileExtension: "pdf", destination: "~/Pinned/PDFs")
+        ])
+        let engine = try ScoringEngine(
+            knowledgeBase: kb, heuristicsEngine: heuristics, pinnedRules: pinnedRules
+        )
+        let candidate = FileCandidate(path: "/Downloads/report.pdf", fileSize: 50_000)
+        let decision = try await engine.route(candidate)
+        #expect(decision != nil)
+        #expect(decision!.destination == "~/Pinned/PDFs")
+        #expect(decision!.confidence == 100)
+    }
 }

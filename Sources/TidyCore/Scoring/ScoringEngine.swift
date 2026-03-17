@@ -6,22 +6,35 @@ public final class ScoringEngine: Sendable {
     private let patternMatcher: PatternMatcher
     private let heuristicsEngine: HeuristicsEngine
     private let aiLayer: (any ScoringLayer)?
+    private let pinnedRules: PinnedRulesManager
 
-    public init(knowledgeBase: KnowledgeBase, heuristicsEngine: HeuristicsEngine) throws {
+    public init(knowledgeBase: KnowledgeBase, heuristicsEngine: HeuristicsEngine, pinnedRules: PinnedRulesManager = PinnedRulesManager()) throws {
         self.knowledgeBase = knowledgeBase
         self.patternMatcher = PatternMatcher(knowledgeBase: knowledgeBase)
         self.heuristicsEngine = heuristicsEngine
         self.aiLayer = nil
+        self.pinnedRules = pinnedRules
     }
 
-    public init(knowledgeBase: KnowledgeBase, heuristicsEngine: HeuristicsEngine, aiLayer: any ScoringLayer) throws {
+    public init(knowledgeBase: KnowledgeBase, heuristicsEngine: HeuristicsEngine, aiLayer: any ScoringLayer, pinnedRules: PinnedRulesManager = PinnedRulesManager()) throws {
         self.knowledgeBase = knowledgeBase
         self.patternMatcher = PatternMatcher(knowledgeBase: knowledgeBase)
         self.heuristicsEngine = heuristicsEngine
         self.aiLayer = aiLayer
+        self.pinnedRules = pinnedRules
     }
 
     public func route(_ candidate: FileCandidate) async throws -> RoutingDecision? {
+        // Check pinned rules first — they override everything
+        if let pinnedMatch = pinnedRules.match(candidate) {
+            return RoutingDecision(
+                destination: pinnedMatch.destination,
+                confidence: 100,
+                layerBreakdown: ["pinned": 1.0],
+                reason: "Pinned rule: *.\(candidate.fileExtension ?? "") → \(pinnedMatch.destination)"
+            )
+        }
+
         let moveCount = try knowledgeBase.totalMoveCount()
 
         let patternScores = try await patternMatcher.score(candidate)
