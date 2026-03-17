@@ -4,28 +4,37 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Tidy is a native macOS menu bar utility that learns where downloaded files belong by observing user behavior, then organizes them automatically. Privacy-first: all intelligence runs locally, no cloud APIs.
+Tidy is a native macOS menu bar utility that learns where downloaded files belong by observing user behavior, then organizes them automatically. Privacy-first: all intelligence runs locally — no cloud APIs, no data leaves the device.
 
-See DESIGN.md for the full specification.
+See DESIGN.md for the full product specification.
 
 ## Tech Stack
 
-- **Swift + SwiftUI** — native menu bar app targeting macOS 26 (Tahoe) with graceful fallback to macOS 14+
-- **SQLite via GRDB** — local knowledge base for learned file routing patterns
-- **Foundation Models framework** — on-device 3B LLM for semantic file classification (macOS 26+ only)
-- **FSEvents** — file system watching for ~/Downloads
-- **Spotlight / MDItem APIs** — file metadata extraction (UTI, download URL, source app)
+- **Swift 6 + SwiftUI** — native menu bar app, `MenuBarExtra` with `.window` style
+- **GRDB.swift 7.x** — SQLite ORM for the local knowledge base
+- **Foundation Models framework** — on-device 3B LLM for semantic file classification (macOS 26+ only, guarded with `#if canImport`)
+- **FSEvents (CoreServices)** — battery-efficient file system watching
+- **PDFKit** — PDF text extraction for content-aware classification
+- **Spotlight / MDItem APIs** — file metadata extraction (UTI, download URL, source app, dimensions)
+- **ServiceManagement** — launch-at-login without a LaunchAgent plist
+- **UserNotifications** — native macOS notifications for auto-moves
 
 ## Build & Development
 
-Two SPM targets: `TidyCore` (library) and `Tidy` (executable menu bar app).
+Two SPM targets: `TidyCore` (library with all logic) and `Tidy` (executable menu bar app).
 
 ```bash
 # Build
 swift build
 
-# Run the app
+# Run the app directly
 swift run Tidy
+
+# Package as .app bundle (builds release + creates build/Tidy.app)
+./scripts/bundle.sh
+
+# Install to /Applications
+cp -r build/Tidy.app /Applications/
 
 # Run tests (CommandLineTools-only env; with Xcode, plain `swift test` works)
 swift test -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Developer/Frameworks
@@ -34,60 +43,135 @@ swift test -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Deve
 swift test --filter SuiteName/testMethodName -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Developer/Frameworks
 ```
 
-**Testing quirk:** `import Foundation` and `import Testing` cannot coexist in the same file under CommandLineTools. Foundation types are available through `@testable import TidyCore`. Shared test helpers go in `Tests/TidyCoreTests/TestHelpers.swift` (which imports Foundation but not Testing).
+### Environment Quirks
 
-**Foundation Models quirk:** macOS 26 SDK headers are present but CommandLineTools lacks the `FoundationModelsMacros` compiler plugin. The `@Generable` code is guarded with `#if canImport(FoundationModels) && FOUNDATION_MODELS_MACROS_AVAILABLE`. Enable the flag in Package.swift when building with Xcode.
+**Testing:** `import Foundation` and `import Testing` cannot coexist in the same file under CommandLineTools. Foundation types are available through `@testable import TidyCore`. Shared test helpers (file creation, temp paths) go in `Tests/TidyCoreTests/TestHelpers.swift` (imports Foundation but not Testing).
+
+**Foundation Models:** macOS 26 SDK headers are present in CommandLineTools but the `FoundationModelsMacros` compiler plugin is missing. The `@Generable` code is double-guarded with `#if canImport(FoundationModels) && FOUNDATION_MODELS_MACROS_AVAILABLE`. To enable: uncomment the `.define("FOUNDATION_MODELS_MACROS_AVAILABLE")` line in Package.swift (requires Xcode with the macro plugin).
+
+**App bundling:** SPM doesn't produce `.app` bundles natively. `scripts/bundle.sh` wraps the release binary into `build/Tidy.app` with an `Info.plist` (`LSUIElement=true` hides from dock) and ad-hoc code signature.
 
 ## Code Structure
 
 ```
-Sources/TidyCore/
-  Models/        — FileCandidate, SizeBucket, TimeBucket, PatternRecord, MoveRecord, RoutingDecision
-  Database/      — KnowledgeBase (GRDB/SQLite with migrations, undo support, pruning)
-  Metadata/      — FileMetadataExtractor (Spotlight/MDItem)
-  Heuristics/    — ScreenshotDetector, InstallerDetector, FolderArchaeologist,
-                   TokenClusterer, RecencyWeighter, HeuristicsEngine
-  Matching/      — PatternMatcher (weighted feature vector matching)
-  Scoring/       — ScoringLayer protocol (async), ScoringEngine (2/3-layer with pinned rules)
-  Intelligence/  — ContentExtractor, InvocationPolicy, FileClassification, AppleIntelligenceLayer
-  Watcher/       — FileWatcher (FSEvents), SettleTimer (actor), IgnoreFilter
-  Operations/    — FileMover, UndoLog (500-entry pruning), SignalRecorder
-  Orchestrator/  — MoveOrchestrator (actor), OrchestratorEvent
-  Rules/         — PinnedRule, PinnedRulesManager (JSON persistence)
-Sources/Tidy/
-  TidyApp.swift              — @main with MenuBarExtra
-  AppState.swift             — @Observable: bridges TidyCore → SwiftUI, settings persistence
-  Views/                     — PanelView, SuggestionCard, RecentMoveRow, SettingsView, StatusFooter
+Sources/TidyCore/                    38 source files — all business logic
+  Models/                            Data types
+    FileCandidate.swift              Input to scoring: path, tokens, extension, size/time bucket, metadata
+    SizeBucket.swift                 Enum: tiny/small/medium/large/huge (byte thresholds)
+    TimeBucket.swift                 Enum: morning/midday/afternoon/evening/night
+    PatternRecord.swift              GRDB record: learned pattern + signal type + weight
+    MoveRecord.swift                 GRDB record: move history for undo
+    RoutingDecision.swift            Output: destination, confidence (0-100), tier, layer breakdown
+  Database/
+    KnowledgeBase.swift              GRDB DatabaseQueue wrapper — migrations, pattern CRUD, move log, pruning
+  Metadata/
+    FileMetadataExtractor.swift      Wraps MDItem/Spotlight APIs → FileMetadata struct
+  Heuristics/                        Day-one intelligence (Layer 3)
+    ScreenshotDetector.swift         Regex filename matching + kMDItemIsScreenCapture
+    InstallerDetector.swift          Extension set: dmg/pkg/mpkg/app
+    FolderArchaeologist.swift        Scans folder tree → extension affinity map + confidence boost
+    TokenClusterer.swift             Builds token sets from organized folder filenames
+    RecencyWeighter.swift            Exponential decay: weight = 0.95^days
+    HeuristicsEngine.swift           Composes all heuristics → ScoringLayer
+  Matching/                          Learned intelligence (Layer 1)
+    PatternMatcher.swift             Weighted feature vector: ext(0.35) + tokens(0.30) + app(0.15) + size(0.10) + time(0.10)
+  Scoring/
+    ScoringLayer.swift               Protocol: func score(_:) async throws -> [ScoredDestination]
+    ScoringEngine.swift              Combines layers with shifting weights; pinned rules override at 100%
+  Intelligence/                      Semantic intelligence (Layer 2, macOS 26+)
+    ContentExtractor.swift           Extracts text from PDF/TXT/MD/CSV (first ~500 words)
+    InvocationPolicy.swift           Energy budget: when to invoke AI based on confidence + file type
+    FileClassification.swift         @Generable struct: category, subfolder, confidence, summary
+    AppleIntelligenceLayer.swift     ScoringLayer using on-device Foundation Models
+  Watcher/
+    FileWatcher.swift                FSEvents wrapper → AsyncStream<FileEvent>
+    SettleTimer.swift                Actor: tracks file stability before acting (default 5s)
+    IgnoreFilter.swift               Rejects dotfiles, .part/.crdownload/.download, tmp/temp
+  Operations/
+    FileMover.swift                  Atomic moves with collision handling (-2, -3 suffix)
+    UndoLog.swift                    Last 500 moves with auto-pruning, undo support
+    SignalRecorder.swift             Records observation/correction/confirmation → KnowledgeBase
+  Orchestrator/
+    MoveOrchestrator.swift           Actor: full pipeline watch → filter → score → move/suggest
+    OrchestratorEvent.swift          Enum: autoMoved, suggested, newFile, undone, observed
+  Rules/
+    PinnedRule.swift                 Model: extension → destination mapping (100% confidence)
+    PinnedRulesManager.swift         JSON persistence, match, add/remove
+
+Sources/Tidy/                        7 source files — SwiftUI app
+  TidyApp.swift                      @main with MenuBarExtra, notification permission, lifecycle
+  AppState.swift                     @Observable @MainActor: bridges TidyCore → SwiftUI
+                                     Settings persistence (UserDefaults), FileWatcher event loop,
+                                     user actions (approve/reject/redirect/undo), pinned rules mgmt
+  Views/
+    PanelView.swift                  Main dropdown: header, suggestions list, recent moves, empty state
+    SuggestionCard.swift             File card: icon, filename, destination, confidence, action buttons
+    RecentMoveRow.swift              Move entry: filename, destination, time-ago, undo button
+    SettingsView.swift               Watch folder, confidence sliders, settle time, toggles,
+                                     pinned rules editor, KB stats, launch-at-login, sync path
+    StatusFooter.swift               Bottom bar: unsorted file count, moved-today counter
+
+bundle/
+  Info.plist                         App bundle metadata: LSUIElement=true, bundle ID, version
+
+scripts/
+  bundle.sh                          Builds release binary → build/Tidy.app with ad-hoc signing
+
+Tests/TidyCoreTests/                 22 test files, 94 tests across 21 suites
+  TestHelpers.swift                  Foundation-based test utilities (temp files, cleanup)
 ```
 
-**Key entry points:**
-- `ScoringEngine.route(_:) async throws -> RoutingDecision?` — scores a file, returns destination + confidence + tier
-- `MoveOrchestrator.processFile(_:) async throws -> OrchestratorEvent?` — full pipeline: filter → score → move/suggest
-- `AppState.start()` — bootstraps all components, starts FileWatcher event loop
+### Key Entry Points
+
+- **`ScoringEngine.route(_:)`** `async throws -> RoutingDecision?` — scores a file candidate through all layers (pinned rules → pattern matching → AI → heuristics), returns destination + confidence + tier
+- **`MoveOrchestrator.processFile(_:)`** `async throws -> OrchestratorEvent?` — full pipeline: ignore filter → scoring → auto-move or suggest
+- **`MoveOrchestrator.recordUserMove(...)`** — records observation signal when user manually moves a file (primary learning mechanism)
+- **`AppState.start()`** — bootstraps KnowledgeBase, scans folders, creates ScoringEngine + MoveOrchestrator, starts FileWatcher event loop
 
 ## Architecture — Three Intelligence Layers
 
-The core design uses three scoring layers that combine with shifting weights:
+The scoring engine uses three independent layers whose weights shift as user history accumulates:
 
-1. **Pattern Matching (Layer 1)** — SQLite-based feature vector matching (extension, filename tokens, source app, size bucket, time bucket). Sub-millisecond, always runs. Weight grows from 0.0 to 0.6 as user history builds.
+| Phase | Pattern (w1) | Apple Intelligence (w2) | Heuristics (w3) |
+|-------|-------------|------------------------|-----------------|
+| Day 1 (0 moves) | 0.0 | 0.5 | 0.5 |
+| Week 1 (~30 moves) | 0.3 | 0.4 | 0.3 |
+| Week 3 (~80 moves) | 0.5 | 0.3 | 0.2 |
+| Month 2+ (100+ moves) | 0.6 | 0.3 | 0.1 |
 
-2. **Apple Intelligence (Layer 2)** — On-device Foundation Models framework for semantic understanding. Only invoked when pattern matching confidence is low (<50%) or content classification would change routing. Weight stays at 0.3 once stabilized. Disabled on pre-macOS 26.
+Without Apple Intelligence (pre-macOS 26), weights are re-normalized to 2 layers.
 
-3. **Heuristics (Layer 3)** — Day-one bootstrap intelligence: folder archaeology, Spotlight metadata, screenshot/installer detection, filename token clustering, recency-weighted folder preference. Weight decays from 0.5 to 0.1 as learned patterns take over.
+**Pinned rules** bypass all layers — they always produce 100% confidence.
 
-**Scoring:** `final_score(destination) = w1 × pattern + w2 × apple_intelligence + w3 × heuristic` → confidence 0–100.
+**Scoring formula:** `final_score = w1 × pattern + w2 × ai + w3 × heuristic` → confidence 0–100
 
-**Confidence tiers:** 80–100 auto-moves (with undo), 50–79 suggests, 0–49 asks user.
+**Confidence tiers drive behavior:**
+- 80–100: Auto-move (with undo notification, confirmation signal deferred until 60s undo window expires)
+- 50–79: Suggest (file stays, UI shows suggestion card)
+- 0–49: Ask (no guess, "new file" indicator)
 
-## Key Design Constraints
+## Learning Signals
 
-- **Never deletes files** — only moves. Worst case is wrong folder + undo.
-- **Settle time** — files must be unchanged for N seconds before acting (catches partial downloads).
-- **Correction signal weighted 3x** — user overrides are the strongest learning signal.
-- **Apple Intelligence is optional** — the app must work fully on macOS 14+ without it (Layers 1+3 only).
-- **Dropbox sync** — knowledge.db and pinned-rules.json live in `~/Dropbox/.tidy/` for cross-device sync. Conflict resolution is last-write-wins per row via timestamps.
-- **Battery conscious** — FSEvents for watching (not polling), Foundation Model only when needed.
+Three signal types feed the pattern matcher:
 
-## UI Pattern
+| Signal | Weight | Trigger |
+|--------|--------|---------|
+| Observation | 1.0x | User manually moves a file out of Downloads |
+| Correction | 3.0x | User overrides Tidy's suggestion or auto-move |
+| Confirmation | 1.0x | User approves suggestion or undo window expires |
 
-Menu bar app with three icon states: `◇` idle, `◆` has suggestions, `↻` processing. Dropdown panel shows suggestions with approve/reject/redirect actions and recent moves with undo. Global shortcut: `⌘⇧T`.
+## Data Storage
+
+- **Knowledge base:** `~/Dropbox/.tidy/knowledge.db` (falls back to `~/Library/Application Support/Tidy/knowledge.db`)
+- **Pinned rules:** `~/Dropbox/.tidy/pinned-rules.json` (same fallback)
+- **Settings:** `UserDefaults` (watchPath, thresholds, settle time, toggles, sync path)
+- **Undo log:** Stored in knowledge.db `move_records` table, auto-pruned to 500 entries
+
+## Safety Rails
+
+- **Never deletes** — only moves files. Worst case: wrong folder + undo.
+- **Settle time** — waits N seconds (default 5) for file to stop changing before acting.
+- **Ignore list** — skips dotfiles, `.part`/`.crdownload`/`.download`, files with `tmp`/`temp` tokens.
+- **Undo** — last 500 moves persisted, survives restart.
+- **Pause** — one click to stop all watching/moving.
+- **Deferred confirmation** — auto-moves don't self-reinforce; confirmation recorded only after undo window expires.
