@@ -9,6 +9,7 @@ struct TidyApp: App {
         MenuBarExtra {
             PanelView(state: appState)
                 .task {
+                    appState.requestNotificationPermission()
                     await appState.start()
                 }
         } label: {

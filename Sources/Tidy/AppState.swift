@@ -1,5 +1,6 @@
 import SwiftUI
 import TidyCore
+import UserNotifications
 
 @Observable
 @MainActor
@@ -184,6 +185,7 @@ final class AppState {
             recentMoves.insert(move, at: 0)
             if recentMoves.count > 20 { recentMoves = Array(recentMoves.prefix(20)) }
             movedTodayCount += 1
+            sendAutoMoveNotification(filename: move.filename, destination: move.destinationPath)
         case .suggested(let candidate, let decision):
             suggestions.append(Suggestion(candidate: candidate, decision: decision))
         case .newFile:
@@ -195,6 +197,20 @@ final class AppState {
         }
         updateIconState()
         updateCounts()
+    }
+
+    func requestNotificationPermission() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    private func sendAutoMoveNotification(filename: String, destination: String) {
+        guard showNotifications else { return }
+        let content = UNMutableNotificationContent()
+        content.title = "Tidy"
+        content.body = "Moved \(filename) → \((destination as NSString).lastPathComponent)"
+        if soundOnAutoMove { content.sound = .default }
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
     }
 
     private func updateIconState() {
