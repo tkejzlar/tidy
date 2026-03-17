@@ -1,6 +1,7 @@
 import SwiftUI
 import TidyCore
 import UserNotifications
+import ServiceManagement
 
 @Observable
 @MainActor
@@ -30,27 +31,60 @@ final class AppState {
         didSet { Task { await orchestrator?.setPaused(isPaused) } }
     }
     var showSettings: Bool = false
-    var watchPath: String = "~/Downloads"
-    var autoMoveThreshold: Double = 80
-    var suggestThreshold: Double = 50
-    var settleTime: Double = 5
-    var showNotifications: Bool = true
-    var soundOnAutoMove: Bool = false
+    var watchPath: String = "~/Downloads" {
+        didSet { UserDefaults.standard.set(watchPath, forKey: "watchPath") }
+    }
+    var autoMoveThreshold: Double = 80 {
+        didSet { UserDefaults.standard.set(autoMoveThreshold, forKey: "autoMoveThreshold") }
+    }
+    var suggestThreshold: Double = 50 {
+        didSet { UserDefaults.standard.set(suggestThreshold, forKey: "suggestThreshold") }
+    }
+    var settleTime: Double = 5 {
+        didSet { UserDefaults.standard.set(settleTime, forKey: "settleTime") }
+    }
+    var showNotifications: Bool = true {
+        didSet { UserDefaults.standard.set(showNotifications, forKey: "showNotifications") }
+    }
+    var soundOnAutoMove: Bool = false {
+        didSet { UserDefaults.standard.set(soundOnAutoMove, forKey: "soundOnAutoMove") }
+    }
+
+    var pinnedRules: [PinnedRule] = []
+    var patternCount: Int = 0
+    var launchAtLogin: Bool = false {
+        didSet { updateLaunchAtLogin() }
+    }
+    var dropboxSyncPath: String = "~/Dropbox" {
+        didSet { UserDefaults.standard.set(dropboxSyncPath, forKey: "dropboxSyncPath") }
+    }
 
     private var orchestrator: MoveOrchestrator?
     private var fileWatcher: FileWatcher?
     private var watchTask: Task<Void, Never>?
 
     func start() async {
+        // Load saved settings
+        watchPath = UserDefaults.standard.string(forKey: "watchPath") ?? "~/Downloads"
+        autoMoveThreshold = UserDefaults.standard.object(forKey: "autoMoveThreshold") as? Double ?? 80
+        suggestThreshold = UserDefaults.standard.object(forKey: "suggestThreshold") as? Double ?? 50
+        settleTime = UserDefaults.standard.object(forKey: "settleTime") as? Double ?? 5
+        showNotifications = UserDefaults.standard.object(forKey: "showNotifications") as? Bool ?? true
+        soundOnAutoMove = UserDefaults.standard.bool(forKey: "soundOnAutoMove")
+        dropboxSyncPath = UserDefaults.standard.string(forKey: "dropboxSyncPath") ?? "~/Dropbox"
+
+        loadPinnedRules()
+
         do {
             let expandedPath = NSString(string: watchPath).expandingTildeInPath
 
-            // Try Dropbox path first, fall back to app support
+            // Use configurable dropbox sync path for DB location
+            let syncPath = NSString(string: dropboxSyncPath).expandingTildeInPath
             let dbPath: String
-            let dropboxPath = NSString(string: "~/Dropbox/.tidy/knowledge.db").expandingTildeInPath
-            let dropboxDir = (dropboxPath as NSString).deletingLastPathComponent
-            if FileManager.default.fileExists(atPath: dropboxDir) {
-                try FileManager.default.createDirectory(atPath: dropboxDir, withIntermediateDirectories: true)
+            let tidyDir = "\(syncPath)/.tidy"
+            let dropboxPath = "\(tidyDir)/knowledge.db"
+            if FileManager.default.fileExists(atPath: syncPath) {
+                try FileManager.default.createDirectory(atPath: tidyDir, withIntermediateDirectories: true)
                 dbPath = dropboxPath
             } else {
                 let appSupport = NSString(string: "~/Library/Application Support/Tidy").expandingTildeInPath
@@ -59,6 +93,8 @@ final class AppState {
             }
 
             let kb = try KnowledgeBase(path: dbPath)
+
+            patternCount = (try? kb.patternCount()) ?? 0
 
             let roots = [
                 NSString(string: "~/Documents").expandingTildeInPath,
@@ -154,6 +190,46 @@ final class AppState {
         }
     }
 
+    func loadPinnedRules() {
+        let path = pinnedRulesFilePath()
+        if let manager = try? PinnedRulesManager.load(from: path) {
+            pinnedRules = manager.rules
+        }
+    }
+
+    func addPinnedRule(extension ext: String, destination: String) {
+        var manager = PinnedRulesManager(rules: pinnedRules)
+        manager.addRule(PinnedRule(fileExtension: ext, destination: destination))
+        pinnedRules = manager.rules
+        try? manager.save(to: pinnedRulesFilePath())
+    }
+
+    func removePinnedRule(extension ext: String) {
+        var manager = PinnedRulesManager(rules: pinnedRules)
+        manager.removeRule(forExtension: ext)
+        pinnedRules = manager.rules
+        try? manager.save(to: pinnedRulesFilePath())
+    }
+
+    private func pinnedRulesFilePath() -> String {
+        let syncPath = NSString(string: dropboxSyncPath).expandingTildeInPath
+        let tidyDir = "\(syncPath)/.tidy"
+        if FileManager.default.fileExists(atPath: syncPath) {
+            return "\(tidyDir)/pinned-rules.json"
+        }
+        return NSString(string: "~/Library/Application Support/Tidy/pinned-rules.json").expandingTildeInPath
+    }
+
+    private func updateLaunchAtLogin() {
+        do {
+            if launchAtLogin {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
+        } catch { }
+    }
+
     private func handleFileEvent(_ event: FileEvent) async {
         guard let orchestrator else { return }
         switch event {
@@ -221,5 +297,14 @@ final class AppState {
         let path = NSString(string: watchPath).expandingTildeInPath
         let contents = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
         unsortedCount = contents.filter { !$0.hasPrefix(".") }.count
+    }
+}
+
+private extension Optional where Wrapped == Double {
+    var orDefault: Double? {
+        switch self {
+        case .some(let v) where v != 0: return v
+        default: return nil
+        }
     }
 }
