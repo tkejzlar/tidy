@@ -6,11 +6,16 @@ let package = Package(
     platforms: [.macOS(.v15)],
     products: [
         .library(name: "TidyCore", targets: ["TidyCore"]),
+        .executable(name: "Tidy", targets: ["Tidy"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
     ],
     targets: [
+        .executableTarget(
+            name: "Tidy",
+            dependencies: ["TidyCore"]
+        ),
         .target(
             name: "TidyCore",
             dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
