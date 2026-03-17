@@ -16,3 +16,15 @@ func createDirectory(atPath path: String) throws {
 func createFile(atPath path: String) {
     FileManager.default.createFile(atPath: path, contents: nil)
 }
+
+func createFile(atPath path: String, contents: Data) {
+    FileManager.default.createFile(atPath: path, contents: contents)
+}
+
+func createFile(atPath path: String, text: String) {
+    FileManager.default.createFile(atPath: path, contents: Data(text.utf8))
+}
+
+func fileExists(atPath path: String) -> Bool {
+    FileManager.default.fileExists(atPath: path)
+}
