@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Tidy",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v15)],
     products: [
         .library(name: "TidyCore", targets: ["TidyCore"]),
     ],
@@ -17,7 +17,20 @@ let package = Package(
         ),
         .testTarget(
             name: "TidyCoreTests",
-            dependencies: ["TidyCore"]
+            dependencies: ["TidyCore"],
+            swiftSettings: [
+                .unsafeFlags([
+                    "-F", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+                ])
+            ],
+            linkerSettings: [
+                .unsafeFlags([
+                    "-F", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+                    "-framework", "Testing",
+                    "-Xlinker", "-rpath",
+                    "-Xlinker", "/Library/Developer/CommandLineTools/Library/Developer/Frameworks",
+                ])
+            ]
         ),
     ]
 )
