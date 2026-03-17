@@ -28,3 +28,11 @@ func createFile(atPath path: String, text: String) {
 func fileExists(atPath path: String) -> Bool {
     FileManager.default.fileExists(atPath: path)
 }
+
+func makeTempFilePath(prefix: String, extension ext: String) -> String {
+    NSTemporaryDirectory() + "\(prefix)-\(UUID().uuidString).\(ext)"
+}
+
+func writeText(_ text: String, toFile path: String) throws {
+    try (text as NSString).write(toFile: path, atomically: true, encoding: String.Encoding.utf8.rawValue)
+}
