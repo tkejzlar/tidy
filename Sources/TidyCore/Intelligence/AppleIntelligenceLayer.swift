@@ -1,6 +1,6 @@
 import Foundation
 
-#if canImport(FoundationModels)
+#if canImport(FoundationModels) && FOUNDATION_MODELS_MACROS_AVAILABLE
 import FoundationModels
 
 @available(macOS 26, *)
@@ -68,7 +68,7 @@ public final class AppleIntelligenceLayer: Sendable, ScoringLayer {
 
 public struct AppleIntelligenceAvailability: Sendable {
     public static var isAvailable: Bool {
-        #if canImport(FoundationModels)
+        #if canImport(FoundationModels) && FOUNDATION_MODELS_MACROS_AVAILABLE
         if #available(macOS 26, *) { return true }
         #endif
         return false

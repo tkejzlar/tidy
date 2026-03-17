@@ -13,7 +13,11 @@ let package = Package(
     targets: [
         .target(
             name: "TidyCore",
-            dependencies: [.product(name: "GRDB", package: "GRDB.swift")]
+            dependencies: [.product(name: "GRDB", package: "GRDB.swift")],
+            swiftSettings: [
+                // Enable only when building on macOS 26+ with macro plugin support.
+                // .define("FOUNDATION_MODELS_MACROS_AVAILABLE"),
+            ]
         ),
         .testTarget(
             name: "TidyCoreTests",
