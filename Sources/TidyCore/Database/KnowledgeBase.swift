@@ -126,7 +126,7 @@ public final class KnowledgeBase: Sendable {
     public func recentMoves(limit: Int) throws -> [MoveRecord] {
         try dbQueue.read { db in
             try MoveRecord
-                .order(Column("createdAt").desc)
+                .order(Column("createdAt").desc, Column("id").desc)
                 .limit(limit)
                 .fetchAll(db)
         }
@@ -146,7 +146,7 @@ public final class KnowledgeBase: Sendable {
 
     public func lastMove() throws -> MoveRecord? {
         try dbQueue.read { db in
-            try MoveRecord.order(Column("createdAt").desc).fetchOne(db)
+            try MoveRecord.order(Column("createdAt").desc, Column("id").desc).fetchOne(db)
         }
     }
 
@@ -154,7 +154,7 @@ public final class KnowledgeBase: Sendable {
         try dbQueue.read { db in
             try MoveRecord
                 .filter(Column("wasUndone") == false)
-                .order(Column("createdAt").desc)
+                .order(Column("createdAt").desc, Column("id").desc)
                 .fetchOne(db)
         }
     }
@@ -166,7 +166,7 @@ public final class KnowledgeBase: Sendable {
                 try db.execute(
                     sql: """
                         DELETE FROM move_records WHERE id NOT IN (
-                            SELECT id FROM move_records ORDER BY createdAt DESC LIMIT ?
+                            SELECT id FROM move_records ORDER BY createdAt DESC, id DESC LIMIT ?
                         )
                         """,
                     arguments: [keepLast]
