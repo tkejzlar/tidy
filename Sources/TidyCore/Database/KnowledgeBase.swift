@@ -137,4 +137,41 @@ public final class KnowledgeBase: Sendable {
             try MoveRecord.fetchCount(db)
         }
     }
+
+    public func markMoveUndone(id: Int64) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE move_records SET wasUndone = 1 WHERE id = ?", arguments: [id])
+        }
+    }
+
+    public func lastMove() throws -> MoveRecord? {
+        try dbQueue.read { db in
+            try MoveRecord.order(Column("createdAt").desc).fetchOne(db)
+        }
+    }
+
+    public func lastUndoableMove() throws -> MoveRecord? {
+        try dbQueue.read { db in
+            try MoveRecord
+                .filter(Column("wasUndone") == false)
+                .order(Column("createdAt").desc)
+                .fetchOne(db)
+        }
+    }
+
+    public func pruneOldMoves(keepLast: Int) throws {
+        try dbQueue.write { db in
+            let count = try MoveRecord.fetchCount(db)
+            if count > keepLast {
+                try db.execute(
+                    sql: """
+                        DELETE FROM move_records WHERE id NOT IN (
+                            SELECT id FROM move_records ORDER BY createdAt DESC LIMIT ?
+                        )
+                        """,
+                    arguments: [keepLast]
+                )
+            }
+        }
+    }
 }
