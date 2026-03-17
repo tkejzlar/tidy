@@ -18,20 +18,52 @@ See DESIGN.md for the full specification.
 
 ## Build & Development
 
-This is a Swift Package / Xcode project. Standard commands:
+Two SPM targets: `TidyCore` (library) and `Tidy` (executable menu bar app).
 
 ```bash
 # Build
 swift build
-# or: xcodebuild -scheme Tidy build
 
-# Run tests (CommandLineTools-only; Xcode can use plain `swift test`)
+# Run the app
+swift run Tidy
+
+# Run tests (CommandLineTools-only env; with Xcode, plain `swift test` works)
 swift test -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Developer/Frameworks
-# Single test: swift test --filter TestClassName/testMethodName -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Developer/Frameworks
 
-# Run
-swift run
+# Single test
+swift test --filter SuiteName/testMethodName -Xswiftc -F -Xswiftc /Library/Developer/CommandLineTools/Library/Developer/Frameworks
 ```
+
+**Testing quirk:** `import Foundation` and `import Testing` cannot coexist in the same file under CommandLineTools. Foundation types are available through `@testable import TidyCore`. Shared test helpers go in `Tests/TidyCoreTests/TestHelpers.swift` (which imports Foundation but not Testing).
+
+**Foundation Models quirk:** macOS 26 SDK headers are present but CommandLineTools lacks the `FoundationModelsMacros` compiler plugin. The `@Generable` code is guarded with `#if canImport(FoundationModels) && FOUNDATION_MODELS_MACROS_AVAILABLE`. Enable the flag in Package.swift when building with Xcode.
+
+## Code Structure
+
+```
+Sources/TidyCore/
+  Models/        — FileCandidate, SizeBucket, TimeBucket, PatternRecord, MoveRecord, RoutingDecision
+  Database/      — KnowledgeBase (GRDB/SQLite with migrations, undo support, pruning)
+  Metadata/      — FileMetadataExtractor (Spotlight/MDItem)
+  Heuristics/    — ScreenshotDetector, InstallerDetector, FolderArchaeologist,
+                   TokenClusterer, RecencyWeighter, HeuristicsEngine
+  Matching/      — PatternMatcher (weighted feature vector matching)
+  Scoring/       — ScoringLayer protocol (async), ScoringEngine (2/3-layer with pinned rules)
+  Intelligence/  — ContentExtractor, InvocationPolicy, FileClassification, AppleIntelligenceLayer
+  Watcher/       — FileWatcher (FSEvents), SettleTimer (actor), IgnoreFilter
+  Operations/    — FileMover, UndoLog (500-entry pruning), SignalRecorder
+  Orchestrator/  — MoveOrchestrator (actor), OrchestratorEvent
+  Rules/         — PinnedRule, PinnedRulesManager (JSON persistence)
+Sources/Tidy/
+  TidyApp.swift              — @main with MenuBarExtra
+  AppState.swift             — @Observable: bridges TidyCore → SwiftUI, settings persistence
+  Views/                     — PanelView, SuggestionCard, RecentMoveRow, SettingsView, StatusFooter
+```
+
+**Key entry points:**
+- `ScoringEngine.route(_:) async throws -> RoutingDecision?` — scores a file, returns destination + confidence + tier
+- `MoveOrchestrator.processFile(_:) async throws -> OrchestratorEvent?` — full pipeline: filter → score → move/suggest
+- `AppState.start()` — bootstraps all components, starts FileWatcher event loop
 
 ## Architecture — Three Intelligence Layers
 
