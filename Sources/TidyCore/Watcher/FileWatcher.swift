@@ -35,7 +35,7 @@ public final class FileWatcher: @unchecked Sendable {
         guard let stream = FSEventStreamCreate(
             nil,
             { (_, info, numEvents, eventPaths, eventFlags, _) in
-                guard let info = info, let eventFlags = eventFlags else { return }
+                guard let info = info else { return }
                 let watcher = Unmanaged<FileWatcher>.fromOpaque(info).takeUnretainedValue()
                 let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as! [String]
                 let flags = Array(UnsafeBufferPointer(start: eventFlags, count: numEvents))
