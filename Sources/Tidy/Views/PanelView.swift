@@ -133,14 +133,20 @@ struct PanelView: View {
     }
 
     private func pickCleanupFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Choose Folder to Clean Up"
-        if panel.runModal() == .OK, let url = panel.url {
-            let folder = WatchedFolder(url: url, role: .inbox)
-            state.addWatchedFolder(folder)
+        // Dispatch async so the menu bar panel can close and NSOpenPanel gets focus
+        DispatchQueue.main.async {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            panel.prompt = "Clean Up"
+            panel.message = "Choose a folder to scan and organize"
+            panel.level = .floating
+            if panel.runModal() == .OK, let url = panel.url {
+                Task { @MainActor in
+                    await state.startCleanup(folder: url)
+                }
+            }
         }
     }
 }
