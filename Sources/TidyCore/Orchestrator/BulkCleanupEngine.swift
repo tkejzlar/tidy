@@ -53,12 +53,11 @@ public actor BulkCleanupEngine {
         let total = filePaths.count
         var proposed: [ProposedMove] = []
 
-        // Process in batches of ~50
-        let batchSize = 50
         for (index, path) in filePaths.enumerated() {
             guard !isCancelled else { break }
 
-            if index % batchSize == 0 {
+            // Report progress every 10 files
+            if index % 10 == 0 {
                 progressCallback?(.scanning(current: index, total: total))
             }
 
@@ -66,7 +65,27 @@ public actor BulkCleanupEngine {
             let fileSize = (attrs?[.size] as? UInt64) ?? 0
             let candidate = FileCandidate(path: path, fileSize: fileSize)
 
-            let context = await pipeline.enrich(candidate)
+            // Lightweight enrichment for bulk: text + download context only, skip Vision
+            // (Vision is too slow for 1000+ files)
+            let contentExtractor = ContentExtractor()
+            let downloadExtractor = DownloadContextExtractor()
+
+            var extractedText: String? = nil
+            if let ext = candidate.fileExtension, ContentExtractor.isTextExtractable(extension: ext) {
+                extractedText = contentExtractor.extractText(from: candidate.path)
+            }
+
+            var dlContext = downloadExtractor.extract(fromPath: candidate.path)
+            if dlContext.sourceCategory == .unknown, let url = candidate.downloadURL {
+                dlContext = downloadExtractor.contextFromURL(url)
+            }
+            let finalDlContext = (dlContext.sourceCategory == .unknown && dlContext.sourceURL == nil) ? nil : dlContext
+
+            let context = EnrichedFileContext(
+                candidate: candidate,
+                extractedText: extractedText,
+                downloadContext: finalDlContext
+            )
 
             guard let decision = try await scoringEngine.route(context) else { continue }
 
