@@ -3,6 +3,9 @@ import TidyCore
 
 struct PanelView: View {
     @Bindable var state: AppState
+    @State private var visiblePerTier: [String: Int] = [:]
+
+    private let pageSize = 20
 
     private var autoMoveSuggestions: [AppState.Suggestion] {
         state.suggestions.filter { $0.decision.tier == .autoMove }
@@ -16,13 +19,16 @@ struct PanelView: View {
         state.suggestions.filter { $0.decision.tier == .ask }
     }
 
+    private func visibleCount(for tier: String) -> Int {
+        visiblePerTier[tier] ?? pageSize
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Tidy").font(.headline)
                 Spacer()
                 Button(action: {
-                    NSLog("[PanelView] sparkles tapped")
                     let appState = state
                     FolderPicker.pick(prompt: "Clean Up", message: "Choose a folder to scan and organize") { url in
                         Task { @MainActor in await appState.startCleanup(folder: url) }
@@ -47,7 +53,7 @@ struct PanelView: View {
                 SettingsView(state: state)
             } else {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
+                    LazyVStack(alignment: .leading, spacing: 8) {
                         // Cleanup progress indicator
                         if state.isCleaningUp, let progress = state.cleanupProgress {
                             HStack {
@@ -74,9 +80,9 @@ struct PanelView: View {
                         }
 
                         if !state.suggestions.isEmpty {
-                            // Overall suggestions header with "Move all" button
+                            // Overall suggestions header
                             HStack {
-                                Text("Suggestions")
+                                Text("Suggestions (\(state.suggestions.count))")
                                     .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
                                 Spacer()
@@ -87,35 +93,36 @@ struct PanelView: View {
                             }
                             .padding(.horizontal)
 
-                            // High Confidence tier (autoMove: 80–100) — green accent
+                            // High Confidence tier (autoMove: 80–100)
                             if !autoMoveSuggestions.isEmpty {
                                 tierSection(
+                                    tier: "autoMove",
                                     title: "High Confidence",
                                     suggestions: autoMoveSuggestions,
                                     accentColor: .green,
-                                    batchActionTitle: "Move All",
                                     showBatchAction: true
                                 )
                             }
 
-                            // Suggestions tier (suggest: 50–79) — blue accent
+                            // Suggestions tier (suggest: 50–79)
                             if !suggestSuggestions.isEmpty {
                                 tierSection(
+                                    tier: "suggest",
                                     title: "Suggestions",
                                     suggestions: suggestSuggestions,
                                     accentColor: .blue,
-                                    batchActionTitle: "Move All",
                                     showBatchAction: true
                                 )
                             }
 
-                            // Needs Review tier (ask: 0–49) — orange accent, no batch action
+                            // Needs Review tier (ask: 0–49)
                             if !askSuggestions.isEmpty {
                                 tierSection(
+                                    tier: "ask",
                                     title: "Needs Review",
                                     suggestions: askSuggestions,
                                     accentColor: .orange,
-                                    batchActionTitle: nil
+                                    showBatchAction: false
                                 )
                             }
                         }
@@ -157,20 +164,24 @@ struct PanelView: View {
 
     @ViewBuilder
     private func tierSection(
+        tier: String,
         title: String,
         suggestions: [AppState.Suggestion],
         accentColor: Color,
-        batchActionTitle: String?,
-        showBatchAction: Bool = false
+        showBatchAction: Bool
     ) -> some View {
+        let visible = visibleCount(for: tier)
+        let shown = Array(suggestions.prefix(visible))
+        let remaining = suggestions.count - shown.count
+
         VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("\(title) (\(suggestions.count))")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(accentColor)
                 Spacer()
-                if showBatchAction, let actionTitle = batchActionTitle {
-                    Button(actionTitle) {
+                if showBatchAction {
+                    Button("Move All") {
                         let toApprove = suggestions
                         for s in toApprove { state.approve(s) }
                     }
@@ -181,13 +192,23 @@ struct PanelView: View {
             }
             .padding(.horizontal)
 
-            ForEach(suggestions) { suggestion in
+            ForEach(shown) { suggestion in
                 SuggestionCard(
                     suggestion: suggestion,
                     onApprove: { state.approve(suggestion) },
                     onReject: { state.reject(suggestion) },
                     onRedirect: { state.redirect(suggestion) }
                 ).padding(.horizontal, 8)
+            }
+
+            if remaining > 0 {
+                Button("Show more (\(remaining) remaining)") {
+                    visiblePerTier[tier] = visible + pageSize
+                }
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal)
             }
         }
     }
