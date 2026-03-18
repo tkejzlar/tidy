@@ -146,6 +146,8 @@ final class AppState {
             let deviceId = DeviceIdentity.deviceId()
             syncManager = SyncManager(backend: syncBackend, deviceId: deviceId, knowledgeBase: kb, dropboxPath: dropboxSyncPath)
 
+            startSyncWatcher()
+
             patternCount = (try? kb.patternCount()) ?? 0
 
             let roots = [
@@ -440,6 +442,12 @@ final class AppState {
     func setSyncBackend(_ backend: SyncBackend) {
         syncBackend = backend
         UserDefaults.standard.set(backend.rawValue, forKey: "syncBackend")
+        // Restart watcher for the new backend
+        syncWatcher?.stop()
+        syncWatcher = nil
+        if backend != .local {
+            startSyncWatcher()
+        }
     }
 
     func exportRulePack(name: String, description: String, to path: String) throws {
@@ -454,6 +462,24 @@ final class AppState {
     func importRulePack(from path: String) throws -> RulePack {
         let manager = RulePackManager()
         return try manager.load(from: path)
+    }
+
+    /// Start watching the sync directory for incoming changes from other devices.
+    /// Only active when syncBackend != .local. Debounces rapid events with a 2-second delay.
+    private func startSyncWatcher() {
+        guard syncBackend != .local else { return }
+        let watchPath = syncBackend.syncDirectory(dropboxPath: dropboxSyncPath)
+        let watcher = SyncDirectoryWatcher(path: watchPath) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, !self.syncImportScheduled else { return }
+                self.syncImportScheduled = true
+                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2 seconds debounce
+                self.syncImportScheduled = false
+                await self.importSync()
+            }
+        }
+        watcher.start()
+        syncWatcher = watcher
     }
 
     private func pinnedRulesFilePath() -> String {
