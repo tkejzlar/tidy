@@ -199,19 +199,32 @@ struct SettingsView: View {
 
                     HStack {
                         Button("Export Rules") {
-                            let panel = NSSavePanel()
-                            panel.allowedContentTypes = [.json]
-                            panel.nameFieldStringValue = "tidy-rules.tidypack"
-                            if panel.runModal() == .OK, let url = panel.url {
-                                try? state.exportRulePack(name: "My Rules", description: "Exported Tidy rules", to: url.path)
+                            // Use osascript to pick save location
+                            DispatchQueue.global(qos: .userInitiated).async {
+                                let script = """
+                                set savePath to (choose file name with prompt "Export Rule Pack" default name "tidy-rules.tidypack")
+                                return POSIX path of savePath
+                                """
+                                let process = Process()
+                                process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+                                process.arguments = ["-e", script]
+                                let pipe = Pipe()
+                                process.standardOutput = pipe
+                                process.standardError = FileHandle.nullDevice
+                                try? process.run()
+                                process.waitUntilExit()
+                                guard process.terminationStatus == 0 else { return }
+                                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                                guard let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                                      !path.isEmpty else { return }
+                                DispatchQueue.main.async {
+                                    try? state.exportRulePack(name: "My Rules", description: "Exported Tidy rules", to: path)
+                                }
                             }
                         }
 
                         Button("Import Rules") {
-                            let panel = NSOpenPanel()
-                            panel.allowedContentTypes = [.json]
-                            panel.allowsMultipleSelection = false
-                            if panel.runModal() == .OK, let url = panel.url {
+                            FolderPicker.pickFile(prompt: "Import Rule Pack") { url in
                                 if let pack = try? state.importRulePack(from: url.path) {
                                     let manager = RulePackManager()
                                     var rulesManager = PinnedRulesManager(rules: state.pinnedRules)
