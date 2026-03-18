@@ -241,26 +241,43 @@ struct SettingsView: View {
         .font(.system(size: 12))
     }
 
+    private func suppressMenuBarHiding<T>(_ body: () -> T) -> T {
+        let windows = NSApp.windows
+        let saved = windows.compactMap { w -> (NSPanel, Bool)? in
+            guard let p = w as? NSPanel else { return nil }
+            let old = p.hidesOnDeactivate
+            p.hidesOnDeactivate = false
+            return (p, old)
+        }
+        let result = body()
+        for (panel, old) in saved {
+            panel.hidesOnDeactivate = old
+        }
+        return result
+    }
+
     private func pickAndAddFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            let folder = WatchedFolder(url: url, role: .inbox)
-            state.addWatchedFolder(folder)
+        suppressMenuBarHiding {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            if panel.runModal() == .OK, let url = panel.url {
+                let folder = WatchedFolder(url: url, role: .inbox)
+                state.addWatchedFolder(folder)
+            }
         }
     }
 
     private func pickSyncFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.directoryURL = URL(fileURLWithPath: NSString(string: state.dropboxSyncPath).expandingTildeInPath)
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+        suppressMenuBarHiding {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.directoryURL = URL(fileURLWithPath: NSString(string: state.dropboxSyncPath).expandingTildeInPath)
+            if panel.runModal() == .OK, let url = panel.url {
+                state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+            }
         }
     }
 }

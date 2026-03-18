@@ -133,17 +133,32 @@ struct PanelView: View {
     }
 
     private func pickCleanupFolder() {
+        // MenuBarExtra panels have hidesOnDeactivate — we must prevent
+        // the panel from stealing focus back from NSOpenPanel.
+        // Temporarily disable hidesOnDeactivate on all windows.
+        let windows = NSApp.windows
+        let originalHides = windows.map { ($0, ($0 as? NSPanel)?.hidesOnDeactivate ?? false) }
+        for window in windows {
+            (window as? NSPanel)?.hidesOnDeactivate = false
+        }
+
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
         panel.prompt = "Clean Up"
         panel.message = "Choose a folder to scan and organize"
-        panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
-            Task { @MainActor in
-                await state.startCleanup(folder: url)
-            }
+
+        let response = panel.runModal()
+
+        // Restore original hidesOnDeactivate
+        for (window, hides) in originalHides {
+            (window as? NSPanel)?.hidesOnDeactivate = hides
+        }
+
+        guard response == .OK, let url = panel.url else { return }
+        Task { @MainActor in
+            await state.startCleanup(folder: url)
         }
     }
 }
