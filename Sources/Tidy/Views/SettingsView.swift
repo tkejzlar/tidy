@@ -242,31 +242,25 @@ struct SettingsView: View {
     }
 
     private func pickAndAddFolder() {
-        NSApp.keyWindow?.close()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            NSApp.activate(ignoringOtherApps: true)
-            if panel.runModal() == .OK, let url = panel.url {
-                let folder = WatchedFolder(url: url, role: .inbox)
-                state.addWatchedFolder(folder)
-            }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let folder = WatchedFolder(url: url, role: .inbox)
+            state.addWatchedFolder(folder)
         }
     }
 
     private func pickSyncFolder() {
-        NSApp.keyWindow?.close()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.directoryURL = URL(fileURLWithPath: NSString(string: state.dropboxSyncPath).expandingTildeInPath)
-            NSApp.activate(ignoringOtherApps: true)
-            if panel.runModal() == .OK, let url = panel.url {
-                state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-            }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = URL(fileURLWithPath: NSString(string: state.dropboxSyncPath).expandingTildeInPath)
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
         }
     }
 }
