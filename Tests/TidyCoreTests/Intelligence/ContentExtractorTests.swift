@@ -65,4 +65,45 @@ struct ContentExtractorTests {
         #expect(!ContentExtractor.isTextExtractable(extension: "png"))
         #expect(!ContentExtractor.isTextExtractable(extension: "dmg"))
     }
+
+    @Test("reports new supported extensions")
+    func newSupportedExtensions() {
+        #expect(ContentExtractor.isTextExtractable(extension: "rtf"))
+        #expect(ContentExtractor.isTextExtractable(extension: "docx"))
+        #expect(ContentExtractor.isTextExtractable(extension: "xlsx"))
+        #expect(ContentExtractor.isTextExtractable(extension: "pptx"))
+        #expect(ContentExtractor.isTextExtractable(extension: "eml"))
+    }
+
+    @Test("extracts text from RTF file")
+    func rtfFile() throws {
+        let path = makeTempFilePath(prefix: "tidy-ce", extension: "rtf")
+        createFile(atPath: path, text: #"{\rtf1\ansi Hello from RTF document}"#)
+        defer { removeItem(atPath: path) }
+        let extracted = extractor.extractText(from: path, maxWords: 500)
+        #expect(extracted != nil)
+        #expect(extracted!.contains("Hello"))
+    }
+
+    @Test("extracts text from DOCX file")
+    func docxFile() throws {
+        let path = makeTempFilePath(prefix: "tidy-ce", extension: "docx")
+        defer { removeItem(atPath: path) }
+        try createMinimalDOCX(at: path, text: "Hello from DOCX document")
+        let extracted = extractor.extractText(from: path, maxWords: 500)
+        #expect(extracted != nil)
+        #expect(extracted!.contains("Hello"))
+    }
+
+    @Test("extracts body from EML file")
+    func emlFile() throws {
+        let path = makeTempFilePath(prefix: "tidy-ce", extension: "eml")
+        defer { removeItem(atPath: path) }
+        let eml = "From: sender@example.com\nTo: recipient@example.com\nSubject: Test\n\nHello from EML email body"
+        createFile(atPath: path, text: eml)
+        let extracted = extractor.extractText(from: path, maxWords: 500)
+        #expect(extracted != nil)
+        #expect(extracted!.contains("Hello"))
+        #expect(!extracted!.contains("From:"))
+    }
 }
