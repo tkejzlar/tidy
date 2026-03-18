@@ -41,6 +41,18 @@ func makeURL(string: String) -> URL {
     URL(string: string)!
 }
 
+func makeFileURL(path: String) -> URL {
+    URL(fileURLWithPath: path)
+}
+
+func jsonEncode<T: Encodable>(_ value: T) throws -> Data {
+    try JSONEncoder().encode(value)
+}
+
+func jsonDecode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    try JSONDecoder().decode(type, from: data)
+}
+
 /// Creates a minimal DOCX file at the given path containing the supplied text.
 func createMinimalDOCX(at path: String, text: String) throws {
     let tmpDir = NSTemporaryDirectory() + "docx-\(UUID().uuidString)"
