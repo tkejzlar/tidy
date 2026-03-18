@@ -93,10 +93,9 @@ struct PanelView: View {
                                     title: "High Confidence",
                                     suggestions: autoMoveSuggestions,
                                     accentColor: .green,
-                                    batchActionTitle: "Move All"
-                                ) {
-                                    for s in autoMoveSuggestions { state.approve(s) }
-                                }
+                                    batchActionTitle: "Move All",
+                                    batchAction: { for s in autoMoveSuggestions { state.approve(s) } }
+                                )
                             }
 
                             // Suggestions tier (suggest: 50–79) — blue accent
@@ -105,10 +104,9 @@ struct PanelView: View {
                                     title: "Suggestions",
                                     suggestions: suggestSuggestions,
                                     accentColor: .blue,
-                                    batchActionTitle: "Move All"
-                                ) {
-                                    for s in suggestSuggestions { state.approve(s) }
-                                }
+                                    batchActionTitle: "Move All",
+                                    batchAction: { for s in suggestSuggestions { state.approve(s) } }
+                                )
                             }
 
                             // Needs Review tier (ask: 0–49) — orange accent, no batch action
