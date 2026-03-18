@@ -38,8 +38,8 @@ public actor MoveOrchestrator {
     /// - `.inbox`: full pipeline (enrich -> score -> auto-move or suggest)
     /// - `.archive`: ignored at real-time; processed on-demand via BulkCleanupEngine
     /// - `.watchOnly`: ignored at real-time; learning happens via rename detection
-    public func processFile(_ candidate: FileCandidate, folderRole: FolderRole = .inbox) async throws -> OrchestratorEvent? {
-        if ignoreFilter.shouldIgnore(filename: candidate.filename) { return nil }
+    public func processFile(_ candidate: FileCandidate, folderRole: FolderRole = .inbox, folderIgnorePatterns: [String] = []) async throws -> OrchestratorEvent? {
+        if ignoreFilter.shouldIgnore(filename: candidate.filename, folderPatterns: folderIgnorePatterns) { return nil }
         if isPaused { return nil }
 
         switch folderRole {
