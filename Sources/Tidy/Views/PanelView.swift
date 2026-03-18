@@ -133,15 +133,17 @@ struct PanelView: View {
     }
 
     private func pickCleanupFolder() {
-        // Dispatch async so the menu bar panel can close and NSOpenPanel gets focus
-        DispatchQueue.main.async {
+        // Dismiss the MenuBarExtra panel first so NSOpenPanel can get focus
+        NSApp.keyWindow?.close()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let panel = NSOpenPanel()
             panel.canChooseDirectories = true
             panel.canChooseFiles = false
             panel.allowsMultipleSelection = false
             panel.prompt = "Clean Up"
             panel.message = "Choose a folder to scan and organize"
-            panel.level = .floating
+            NSApp.activate(ignoringOtherApps: true)
             if panel.runModal() == .OK, let url = panel.url {
                 Task { @MainActor in
                     await state.startCleanup(folder: url)

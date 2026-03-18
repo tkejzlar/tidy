@@ -242,23 +242,31 @@ struct SettingsView: View {
     }
 
     private func pickAndAddFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        if panel.runModal() == .OK, let url = panel.url {
-            let folder = WatchedFolder(url: url, role: .inbox)
-            state.addWatchedFolder(folder)
+        NSApp.keyWindow?.close()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.allowsMultipleSelection = false
+            NSApp.activate(ignoringOtherApps: true)
+            if panel.runModal() == .OK, let url = panel.url {
+                let folder = WatchedFolder(url: url, role: .inbox)
+                state.addWatchedFolder(folder)
+            }
         }
     }
 
     private func pickSyncFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.directoryURL = URL(fileURLWithPath: NSString(string: state.dropboxSyncPath).expandingTildeInPath)
-        if panel.runModal() == .OK, let url = panel.url {
-            state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+        NSApp.keyWindow?.close()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let panel = NSOpenPanel()
+            panel.canChooseDirectories = true
+            panel.canChooseFiles = false
+            panel.directoryURL = URL(fileURLWithPath: NSString(string: state.dropboxSyncPath).expandingTildeInPath)
+            NSApp.activate(ignoringOtherApps: true)
+            if panel.runModal() == .OK, let url = panel.url {
+                state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+            }
         }
     }
 }
