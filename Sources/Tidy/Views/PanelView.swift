@@ -4,6 +4,18 @@ import TidyCore
 struct PanelView: View {
     @Bindable var state: AppState
 
+    private var autoMoveSuggestions: [AppState.Suggestion] {
+        state.suggestions.filter { $0.decision.tier == .autoMove }
+    }
+
+    private var suggestSuggestions: [AppState.Suggestion] {
+        state.suggestions.filter { $0.decision.tier == .suggest }
+    }
+
+    private var askSuggestions: [AppState.Suggestion] {
+        state.suggestions.filter { $0.decision.tier == .ask }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
@@ -62,6 +74,7 @@ struct PanelView: View {
                         }
 
                         if !state.suggestions.isEmpty {
+                            // Overall suggestions header with "Move all" button
                             HStack {
                                 Text("Suggestions")
                                     .font(.subheadline.weight(.semibold))
@@ -74,26 +87,39 @@ struct PanelView: View {
                             }
                             .padding(.horizontal)
 
-                            // Move All High-Confidence button
-                            if state.suggestions.count >= 3 {
-                                let highConfidence = state.suggestions.filter { $0.decision.confidence >= 80 }
-                                if !highConfidence.isEmpty {
-                                    Button(action: {
-                                        Task { await state.approveAllHighConfidence() }
-                                    }) {
-                                        Label("Move All High-Confidence (\(highConfidence.count))", systemImage: "checkmark.circle.fill")
-                                    }
-                                    .padding(.horizontal)
+                            // High Confidence tier (autoMove: 80–100) — green accent
+                            if !autoMoveSuggestions.isEmpty {
+                                tierSection(
+                                    title: "High Confidence",
+                                    suggestions: autoMoveSuggestions,
+                                    accentColor: .green,
+                                    batchActionTitle: "Move All"
+                                ) {
+                                    for s in autoMoveSuggestions { state.approve(s) }
                                 }
                             }
 
-                            ForEach(state.suggestions) { suggestion in
-                                SuggestionCard(
-                                    suggestion: suggestion,
-                                    onApprove: { state.approve(suggestion) },
-                                    onReject: { state.reject(suggestion) },
-                                    onRedirect: { state.redirect(suggestion) }
-                                ).padding(.horizontal, 8)
+                            // Suggestions tier (suggest: 50–79) — blue accent
+                            if !suggestSuggestions.isEmpty {
+                                tierSection(
+                                    title: "Suggestions",
+                                    suggestions: suggestSuggestions,
+                                    accentColor: .blue,
+                                    batchActionTitle: "Move All"
+                                ) {
+                                    for s in suggestSuggestions { state.approve(s) }
+                                }
+                            }
+
+                            // Needs Review tier (ask: 0–49) — orange accent, no batch action
+                            if !askSuggestions.isEmpty {
+                                tierSection(
+                                    title: "Needs Review",
+                                    suggestions: askSuggestions,
+                                    accentColor: .orange,
+                                    batchActionTitle: nil,
+                                    batchAction: nil
+                                )
                             }
                         }
 
@@ -130,5 +156,39 @@ struct PanelView: View {
             }
         }
         .frame(width: 360, height: 480)
+    }
+
+    @ViewBuilder
+    private func tierSection(
+        title: String,
+        suggestions: [AppState.Suggestion],
+        accentColor: Color,
+        batchActionTitle: String?,
+        batchAction: (() -> Void)? = nil
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text("\(title) (\(suggestions.count))")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(accentColor)
+                Spacer()
+                if let title = batchActionTitle, let action = batchAction {
+                    Button(title, action: action)
+                        .font(.caption)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(accentColor)
+                }
+            }
+            .padding(.horizontal)
+
+            ForEach(suggestions) { suggestion in
+                SuggestionCard(
+                    suggestion: suggestion,
+                    onApprove: { state.approve(suggestion) },
+                    onReject: { state.reject(suggestion) },
+                    onRedirect: { state.redirect(suggestion) }
+                ).padding(.horizontal, 8)
+            }
+        }
     }
 }
