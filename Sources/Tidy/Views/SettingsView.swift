@@ -6,6 +6,8 @@ struct SettingsView: View {
     @State private var addingRule = false
     @State private var newRuleExt = ""
     @State private var newRuleDest = ""
+    @State private var addingFolder = false
+    @State private var newFolderPath = ""
 
     var body: some View {
         ScrollView {
@@ -65,8 +67,29 @@ struct SettingsView: View {
                         .padding(.vertical, 2)
                     }
 
-                    Button(action: pickAndAddFolder) {
-                        Label("Add Folder", systemImage: "plus")
+                    if addingFolder {
+                        HStack {
+                            TextField("~/Desktop", text: $newFolderPath)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.caption)
+                            Button("Add") {
+                                let expanded = NSString(string: newFolderPath).expandingTildeInPath
+                                if FileManager.default.fileExists(atPath: expanded) {
+                                    let folder = WatchedFolder(url: URL(fileURLWithPath: expanded), role: .inbox)
+                                    state.addWatchedFolder(folder)
+                                    newFolderPath = ""
+                                    addingFolder = false
+                                }
+                            }.font(.caption)
+                            Button("Cancel") {
+                                newFolderPath = ""
+                                addingFolder = false
+                            }.font(.caption)
+                        }
+                    } else {
+                        Button(action: { addingFolder = true }) {
+                            Label("Add Folder", systemImage: "plus")
+                        }
                     }
                 }
 
@@ -164,12 +187,10 @@ struct SettingsView: View {
                 Divider()
 
                 LabeledContent("Sync path") {
-                    HStack {
-                        Text(state.dropboxSyncPath).font(.caption).foregroundStyle(.secondary)
-                        Button(action: pickSyncFolder) {
-                            Image(systemName: "folder")
-                        }.buttonStyle(.plain)
-                    }
+                    TextField("~/Dropbox", text: $state.dropboxSyncPath)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption)
+                        .frame(width: 180)
                 }
 
                 Divider()
@@ -241,43 +262,4 @@ struct SettingsView: View {
         .font(.system(size: 12))
     }
 
-    private func suppressMenuBarHiding<T>(_ body: () -> T) -> T {
-        let windows = NSApp.windows
-        let saved = windows.compactMap { w -> (NSPanel, Bool)? in
-            guard let p = w as? NSPanel else { return nil }
-            let old = p.hidesOnDeactivate
-            p.hidesOnDeactivate = false
-            return (p, old)
-        }
-        let result = body()
-        for (panel, old) in saved {
-            panel.hidesOnDeactivate = old
-        }
-        return result
-    }
-
-    private func pickAndAddFolder() {
-        suppressMenuBarHiding {
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            if panel.runModal() == .OK, let url = panel.url {
-                let folder = WatchedFolder(url: url, role: .inbox)
-                state.addWatchedFolder(folder)
-            }
-        }
-    }
-
-    private func pickSyncFolder() {
-        suppressMenuBarHiding {
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.directoryURL = URL(fileURLWithPath: NSString(string: state.dropboxSyncPath).expandingTildeInPath)
-            if panel.runModal() == .OK, let url = panel.url {
-                state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
-            }
-        }
-    }
 }

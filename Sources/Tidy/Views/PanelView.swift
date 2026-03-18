@@ -1,11 +1,8 @@
 import SwiftUI
 import TidyCore
-import UniformTypeIdentifiers
 
 struct PanelView: View {
     @Bindable var state: AppState
-    @State private var showCleanupMenu = false
-    @State private var showFilePicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -13,15 +10,14 @@ struct PanelView: View {
                 Text("Tidy").font(.headline)
                 Spacer()
                 Menu {
-                    // Quick-clean watched folders
                     ForEach(state.watchedFolders) { folder in
                         Button(folder.url.lastPathComponent) {
                             Task { await state.startCleanup(folder: folder.url) }
                         }
                     }
-                    Divider()
-                    Button("Browse...") {
-                        showFilePicker = true
+                    if state.watchedFolders.isEmpty {
+                        Text("Add folders in Settings")
+                            .foregroundStyle(.secondary)
                     }
                 } label: {
                     Image(systemName: "sparkles")
@@ -138,13 +134,5 @@ struct PanelView: View {
             }
         }
         .frame(width: 360, height: 480)
-        .fileImporter(
-            isPresented: $showFilePicker,
-            allowedContentTypes: [.folder],
-            allowsMultipleSelection: false
-        ) { result in
-            guard case .success(let urls) = result, let url = urls.first else { return }
-            Task { await state.startCleanup(folder: url) }
-        }
     }
 }
