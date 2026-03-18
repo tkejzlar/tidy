@@ -276,6 +276,8 @@ final class AppState {
             recentMoves.removeAll { $0.id == move.id }
         case .observed:
             break
+        case .learnedMove:
+            break
         }
         updateIconState()
         updateCounts()

@@ -7,4 +7,5 @@ public enum OrchestratorEvent: Sendable {
     case newFile(candidate: FileCandidate)
     case undone(originalMove: MoveRecord)
     case observed(filename: String, destination: String)
+    case learnedMove(filename: String, source: String, destination: String)
 }
