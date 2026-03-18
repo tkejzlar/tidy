@@ -9,23 +9,16 @@ struct PanelView: View {
             HStack {
                 Text("Tidy").font(.headline)
                 Spacer()
-                Menu {
-                    ForEach(state.watchedFolders) { folder in
-                        Button(folder.url.lastPathComponent) {
-                            Task { await state.startCleanup(folder: folder.url) }
-                        }
+                Button(action: {
+                    NSLog("[PanelView] sparkles tapped")
+                    let appState = state
+                    FolderPicker.pick(prompt: "Clean Up", message: "Choose a folder to scan and organize") { url in
+                        Task { @MainActor in await appState.startCleanup(folder: url) }
                     }
-                    Divider()
-                    Button("Other Folder...") {
-                        let appState = state
-                        FolderPicker.pick(prompt: "Clean Up", message: "Choose a folder to scan and organize") { url in
-                            Task { @MainActor in await appState.startCleanup(folder: url) }
-                        }
-                    }
-                } label: {
+                }) {
                     Image(systemName: "sparkles")
                         .help("Clean up a folder")
-                }.menuStyle(.borderlessButton)
+                }.buttonStyle(.plain)
                 Button(action: { state.showSettings.toggle() }) {
                     Image(systemName: "gearshape")
                 }.buttonStyle(.plain)
