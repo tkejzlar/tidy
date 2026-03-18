@@ -16,6 +16,7 @@ public struct FileMover: Sendable {
 
     public func move(from sourcePath: String, toDirectory destDir: String) throws -> MoveResult {
         let fm = FileManager.default
+        let destDir = NSString(string: destDir).expandingTildeInPath
         guard fm.fileExists(atPath: sourcePath) else {
             throw FileMoverError.sourceNotFound(sourcePath)
         }
