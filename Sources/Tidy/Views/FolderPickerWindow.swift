@@ -1,45 +1,48 @@
 import SwiftUI
 import AppKit
 
-/// Opens an NSOpenPanel completely independently of the MenuBarExtra.
-/// The key insight: we must close the MenuBarExtra panel FIRST, then open
-/// NSOpenPanel on the next run loop tick. And we must NOT use runModal()
-/// (which blocks and gets cancelled when the MenuBarExtra dismisses) or
-/// beginSheetModal (which requires a parent window). Instead we use
-/// begin() which runs the panel as a standalone modeless dialog.
 @MainActor
 enum FolderPicker {
-    private static var retainedPanel: NSOpenPanel?
-
     static func pick(prompt: String = "Choose", message: String? = nil, completion: @escaping @MainActor (URL) -> Void) {
-        // Step 1: Close the MenuBarExtra panel by ordering out all NSPanels
+        // Run NSOpenPanel in a completely separate modal session
+        // by using a helper NSApplication modal session approach.
+
+        // First: close MenuBarExtra
         for window in NSApp.windows where window is NSPanel {
             window.orderOut(nil)
         }
 
-        // Step 2: On the next run loop tick (after MenuBarExtra is gone),
-        // show NSOpenPanel as a standalone window
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            let panel = NSOpenPanel()
-            panel.canChooseDirectories = true
-            panel.canChooseFiles = false
-            panel.allowsMultipleSelection = false
-            panel.prompt = prompt
-            panel.level = .modalPanel
-            if let message { panel.message = message }
+        // Use a separate process to pick a folder via osascript
+        // This completely avoids the MenuBarExtra focus issue
+        DispatchQueue.global(qos: .userInitiated).async {
+            let script = """
+            set chosenFolder to choose folder with prompt "\(message ?? "Choose a folder")"
+            return POSIX path of chosenFolder
+            """
 
-            // Retain the panel so it doesn't get deallocated
-            retainedPanel = panel
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", script]
 
-            // Activate the app so the panel appears in front
-            NSApp.activate(ignoringOtherApps: true)
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = FileHandle.nullDevice
 
-            // begin() runs the panel as a standalone modeless dialog
-            // — not attached to any window, not blocking any thread
-            panel.begin { response in
-                retainedPanel = nil
-                guard response == .OK, let url = panel.url else { return }
-                completion(url)
+            do {
+                try process.run()
+                process.waitUntilExit()
+
+                guard process.terminationStatus == 0 else { return }
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                guard let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !path.isEmpty else { return }
+
+                let url = URL(fileURLWithPath: path)
+                DispatchQueue.main.async {
+                    completion(url)
+                }
+            } catch {
+                // silently fail
             }
         }
     }
