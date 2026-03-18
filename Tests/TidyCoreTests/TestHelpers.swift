@@ -82,6 +82,10 @@ func makeHomeDirectory() -> String {
     NSHomeDirectory()
 }
 
+func joinPath(_ base: String, _ component: String) -> String {
+    (base as NSString).appendingPathComponent(component)
+}
+
 /// Creates a minimal DOCX file at the given path containing the supplied text.
 func createMinimalDOCX(at path: String, text: String) throws {
     let tmpDir = NSTemporaryDirectory() + "docx-\(UUID().uuidString)"

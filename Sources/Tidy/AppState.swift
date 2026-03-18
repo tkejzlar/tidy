@@ -92,6 +92,11 @@ final class AppState {
     var cleanupProgress: (current: Int, total: Int)?
     var lastCleanupBatchId: String?
 
+    // Sync
+    public var syncBackend: SyncBackend = .local
+    private var syncManager: SyncManager?
+    private(set) var knowledgeBase: KnowledgeBase?
+
     private var orchestrator: MoveOrchestrator?
     private var pipeline: ContentIntelligencePipeline?
     private var fileWatcher: FileWatcher?
@@ -127,6 +132,15 @@ final class AppState {
             }
 
             let kb = try KnowledgeBase(path: dbPath)
+            self.knowledgeBase = kb
+
+            // Load sync backend from UserDefaults
+            if let backendRaw = UserDefaults.standard.string(forKey: "syncBackend"),
+               let backend = SyncBackend(rawValue: backendRaw) {
+                syncBackend = backend
+            }
+            let deviceId = DeviceIdentity.deviceId()
+            syncManager = SyncManager(backend: syncBackend, deviceId: deviceId, knowledgeBase: kb, dropboxPath: dropboxSyncPath)
 
             patternCount = (try? kb.patternCount()) ?? 0
 
@@ -379,6 +393,50 @@ final class AppState {
         manager.removeRule(forExtension: ext)
         pinnedRules = manager.rules
         try? manager.save(to: pinnedRulesFilePath())
+    }
+
+    // MARK: - Sync
+
+    func exportSync() async {
+        guard let syncManager else { return }
+        do {
+            let _ = try await syncManager.exportChanges(pinnedRules: pinnedRules)
+        } catch {
+            // Silently fail for now
+        }
+    }
+
+    func importSync() async {
+        guard let syncManager else { return }
+        do {
+            let rules = PinnedRulesManager(rules: pinnedRules)
+            let (updatedRules, result) = try await syncManager.importChanges(pinnedRulesManager: rules)
+            if result.patternsAdded > 0 || result.patternsUpdated > 0 || result.pinnedRulesUpdated > 0 {
+                pinnedRules = updatedRules.rules
+                // Could show notification here
+            }
+        } catch {
+            // Silently fail for now
+        }
+    }
+
+    func setSyncBackend(_ backend: SyncBackend) {
+        syncBackend = backend
+        UserDefaults.standard.set(backend.rawValue, forKey: "syncBackend")
+    }
+
+    func exportRulePack(name: String, description: String, to path: String) throws {
+        let manager = RulePackManager()
+        try manager.export(
+            name: name, description: description, author: DeviceIdentity.deviceId(),
+            pinnedRules: pinnedRules, patterns: [],
+            to: path
+        )
+    }
+
+    func importRulePack(from path: String) throws -> RulePack {
+        let manager = RulePackManager()
+        return try manager.load(from: path)
     }
 
     private func pinnedRulesFilePath() -> String {

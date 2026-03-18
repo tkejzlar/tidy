@@ -174,6 +174,63 @@ struct SettingsView: View {
 
                 Divider()
 
+                // MARK: - Sync & Sharing
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Sync & Sharing").font(.system(size: 12, weight: .semibold))
+
+                    Picker("Sync Backend", selection: Binding(
+                        get: { state.syncBackend },
+                        set: { state.setSyncBackend($0) }
+                    )) {
+                        Text("Local Only").tag(SyncBackend.local)
+                        Text("Dropbox").tag(SyncBackend.dropbox)
+                        Text("iCloud").tag(SyncBackend.icloud)
+                    }
+
+                    HStack {
+                        Button("Export Rules") {
+                            let panel = NSSavePanel()
+                            panel.allowedContentTypes = [.json]
+                            panel.nameFieldStringValue = "tidy-rules.tidypack"
+                            if panel.runModal() == .OK, let url = panel.url {
+                                try? state.exportRulePack(name: "My Rules", description: "Exported Tidy rules", to: url.path)
+                            }
+                        }
+
+                        Button("Import Rules") {
+                            let panel = NSOpenPanel()
+                            panel.allowedContentTypes = [.json]
+                            panel.allowsMultipleSelection = false
+                            if panel.runModal() == .OK, let url = panel.url {
+                                if let pack = try? state.importRulePack(from: url.path) {
+                                    let manager = RulePackManager()
+                                    var rulesManager = PinnedRulesManager(rules: state.pinnedRules)
+                                    if let kb = state.knowledgeBase {
+                                        let _ = try? manager.applyImport(
+                                            pack: pack,
+                                            acceptedRuleExtensions: Set(pack.pinnedRules.map { $0.fileExtension.lowercased() }),
+                                            knowledgeBase: kb,
+                                            pinnedRulesManager: &rulesManager
+                                        )
+                                        state.pinnedRules = rulesManager.rules
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HStack {
+                        Button("Sync Now") {
+                            Task {
+                                await state.exportSync()
+                                await state.importSync()
+                            }
+                        }
+                    }
+                }
+
+                Divider()
+
                 Button(action: { state.showSettings = false }) {
                     Label("Back", systemImage: "chevron.left")
                 }
