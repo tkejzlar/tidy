@@ -13,7 +13,7 @@ struct HeuristicsEngineTests {
             path: "/Downloads/Screenshot 2026-03-17 at 10.42.31.png",
             fileSize: 500_000
         )
-        let results = try await engine.score(candidate)
+        let results = try await engine.score(EnrichedFileContext(candidate: candidate))
         #expect(results.count == 1)
         #expect(results[0].path == "~/Screenshots")
         #expect(results[0].confidence == 1.0)
@@ -35,7 +35,7 @@ struct HeuristicsEngineTests {
             fileSize: 500_000,
             metadata: metadata
         )
-        let results = try await engine.score(candidate)
+        let results = try await engine.score(EnrichedFileContext(candidate: candidate))
         #expect(results.count == 1)
         #expect(results[0].confidence == 1.0)
     }
@@ -49,7 +49,7 @@ struct HeuristicsEngineTests {
         let candidate = FileCandidate(
             path: "/Downloads/Chrome.dmg", fileSize: 100_000_000
         )
-        let results = try await engine.score(candidate)
+        let results = try await engine.score(EnrichedFileContext(candidate: candidate))
         #expect(results.count == 1)
         #expect(results[0].path == "~/Installers")
         #expect(results[0].confidence == 1.0)
@@ -64,7 +64,7 @@ struct HeuristicsEngineTests {
         let candidate = FileCandidate(
             path: "/Downloads/report.pdf", fileSize: 1_000_000
         )
-        let results = try await engine.score(candidate)
+        let results = try await engine.score(EnrichedFileContext(candidate: candidate))
         #expect(!results.isEmpty)
         let pdfResult = results.first { $0.path == "~/Documents/PDFs" }
         #expect(pdfResult != nil)
@@ -84,7 +84,7 @@ struct HeuristicsEngineTests {
             path: "/Downloads/Screenshot 2026-03-17 at 10.42.31.png",
             fileSize: 500_000
         )
-        let results = try await engine.score(candidate)
+        let results = try await engine.score(EnrichedFileContext(candidate: candidate))
         #expect(results[0].path == "~/Screenshots")
     }
 
@@ -94,7 +94,7 @@ struct HeuristicsEngineTests {
         let candidate = FileCandidate(
             path: "/Downloads/mystery.xyz", fileSize: 100
         )
-        let results = try await engine.score(candidate)
+        let results = try await engine.score(EnrichedFileContext(candidate: candidate))
         #expect(results.isEmpty)
     }
 }

@@ -24,7 +24,8 @@ public final class ScoringEngine: Sendable {
         self.pinnedRules = pinnedRules
     }
 
-    public func route(_ candidate: FileCandidate) async throws -> RoutingDecision? {
+    public func route(_ context: EnrichedFileContext) async throws -> RoutingDecision? {
+        let candidate = context.candidate
         // Check pinned rules first — they override everything
         if let pinnedMatch = pinnedRules.match(candidate) {
             return RoutingDecision(
@@ -37,9 +38,9 @@ public final class ScoringEngine: Sendable {
 
         let moveCount = try knowledgeBase.totalMoveCount()
 
-        let patternScores = try await patternMatcher.score(candidate)
-        let heuristicScores = try await heuristicsEngine.score(candidate)
-        let aiScores = try await aiLayer?.score(candidate) ?? []
+        let patternScores = try await patternMatcher.score(context)
+        let heuristicScores = try await heuristicsEngine.score(context)
+        let aiScores = try await aiLayer?.score(context) ?? []
 
         var allDestinations: Set<String> = []
         for s in patternScores { allDestinations.insert(s.path) }

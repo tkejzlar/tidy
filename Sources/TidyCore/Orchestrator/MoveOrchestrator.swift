@@ -35,7 +35,8 @@ public actor MoveOrchestrator {
         if ignoreFilter.shouldIgnore(filename: candidate.filename) { return nil }
         if isPaused { return nil }
 
-        guard let decision = try await scoringEngine.route(candidate) else {
+        let context = EnrichedFileContext(candidate: candidate)
+        guard let decision = try await scoringEngine.route(context) else {
             return .newFile(candidate: candidate)
         }
 

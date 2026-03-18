@@ -7,7 +7,7 @@ struct MockAILayer: ScoringLayer {
     let destination: String?
     let confidence: Double
     let reason: String
-    func score(_ candidate: FileCandidate) async throws -> [ScoredDestination] {
+    func score(_ context: EnrichedFileContext) async throws -> [ScoredDestination] {
         guard let dest = destination else { return [] }
         return [ScoredDestination(path: dest, confidence: confidence, reason: reason)]
     }
@@ -51,7 +51,7 @@ struct ScoringEngineTests {
         let heuristics = HeuristicsEngine(affinities: [], clusters: [])
         let engine = try ScoringEngine(knowledgeBase: kb, heuristicsEngine: heuristics)
         let candidate = FileCandidate(path: "/Downloads/report-q2.pdf", fileSize: 2_000_000)
-        let decision = try await engine.route(candidate)
+        let decision = try await engine.route(EnrichedFileContext(candidate: candidate))
         #expect(decision != nil)
         #expect(decision!.destination == "~/Documents/Reports")
         #expect(decision!.confidence > 0)
@@ -63,7 +63,7 @@ struct ScoringEngineTests {
         let heuristics = HeuristicsEngine(affinities: [], clusters: [])
         let engine = try ScoringEngine(knowledgeBase: kb, heuristicsEngine: heuristics)
         let candidate = FileCandidate(path: "/Downloads/mystery-file.xyz", fileSize: 100)
-        let decision = try await engine.route(candidate)
+        let decision = try await engine.route(EnrichedFileContext(candidate: candidate))
         #expect(decision == nil)
     }
 
@@ -114,7 +114,7 @@ struct ScoringEngineTests {
         let engine = try ScoringEngine(knowledgeBase: kb, heuristicsEngine: heuristics, aiLayer: mockAI)
 
         let candidate = FileCandidate(path: "/Downloads/invoice.pdf", fileSize: 50_000)
-        let decision = try await engine.route(candidate)
+        let decision = try await engine.route(EnrichedFileContext(candidate: candidate))
         #expect(decision != nil)
         #expect(decision!.destination == "~/Documents/Finance")
         #expect(decision!.layerBreakdown["ai"] != nil)
@@ -131,7 +131,7 @@ struct ScoringEngineTests {
         let engine = try ScoringEngine(knowledgeBase: kb, heuristicsEngine: heuristics, aiLayer: mockAI)
 
         let candidate = FileCandidate(path: "/Downloads/report.pdf", fileSize: 50_000)
-        let decision = try await engine.route(candidate)
+        let decision = try await engine.route(EnrichedFileContext(candidate: candidate))
         #expect(decision != nil)
     }
 
@@ -146,7 +146,7 @@ struct ScoringEngineTests {
             knowledgeBase: kb, heuristicsEngine: heuristics, pinnedRules: pinnedRules
         )
         let candidate = FileCandidate(path: "/Downloads/report.pdf", fileSize: 50_000)
-        let decision = try await engine.route(candidate)
+        let decision = try await engine.route(EnrichedFileContext(candidate: candidate))
         #expect(decision != nil)
         #expect(decision!.destination == "~/Pinned/PDFs")
         #expect(decision!.confidence == 100)

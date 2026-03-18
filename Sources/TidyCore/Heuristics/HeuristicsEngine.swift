@@ -22,7 +22,8 @@ public final class HeuristicsEngine: @unchecked Sendable, ScoringLayer {
         self.installerDestination = installerDestination
     }
 
-    public func score(_ candidate: FileCandidate) async throws -> [ScoredDestination] {
+    public func score(_ context: EnrichedFileContext) async throws -> [ScoredDestination] {
+        let candidate = context.candidate
         var results: [ScoredDestination] = []
         let isScreenCapture = candidate.metadata?.isScreenCapture ?? false
 

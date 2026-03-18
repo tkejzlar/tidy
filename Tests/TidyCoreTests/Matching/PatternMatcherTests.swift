@@ -9,7 +9,7 @@ struct PatternMatcherTests {
         let kb = try KnowledgeBase.inMemory()
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/test.pdf", fileSize: 1000)
-        let results = try await matcher.score(candidate)
+        let results = try await matcher.score(EnrichedFileContext(candidate: candidate))
         #expect(results.isEmpty)
     }
 
@@ -23,7 +23,7 @@ struct PatternMatcherTests {
         )
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/invoice-april.pdf", fileSize: 50_000)
-        let results = try await matcher.score(candidate)
+        let results = try await matcher.score(EnrichedFileContext(candidate: candidate))
         #expect(!results.isEmpty)
         #expect(results[0].path == "~/Documents/Finance")
     }
@@ -43,7 +43,7 @@ struct PatternMatcherTests {
         )
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/report-q1.pdf", fileSize: 2_000_000)
-        let results = try await matcher.score(candidate)
+        let results = try await matcher.score(EnrichedFileContext(candidate: candidate))
         #expect(results.count == 2)
         #expect(results[0].path == "~/Documents/Work")
     }
@@ -63,7 +63,7 @@ struct PatternMatcherTests {
         )
         let matcher = PatternMatcher(knowledgeBase: kb)
         let candidate = FileCandidate(path: "/Downloads/invoice-april.pdf", fileSize: 30_000)
-        let results = try await matcher.score(candidate)
+        let results = try await matcher.score(EnrichedFileContext(candidate: candidate))
         #expect(results[0].path == "~/Documents/Finance")
     }
 }

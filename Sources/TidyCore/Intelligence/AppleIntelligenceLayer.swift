@@ -15,7 +15,8 @@ public final class AppleIntelligenceLayer: Sendable, ScoringLayer {
         self.existingFolders = existingFolders
     }
 
-    public func score(_ candidate: FileCandidate) async throws -> [ScoredDestination] {
+    public func score(_ context: EnrichedFileContext) async throws -> [ScoredDestination] {
+        let candidate = context.candidate
         let isScreenshot = candidate.metadata?.isScreenCapture ?? false
         guard invocationPolicy.shouldInvoke(
             extension: candidate.fileExtension, patternConfidence: nil, isScreenshot: isScreenshot
@@ -24,8 +25,16 @@ public final class AppleIntelligenceLayer: Sendable, ScoringLayer {
         var prompt = "Classify this file for organizing into folders.\n\n"
         prompt += "Filename: \(candidate.filename)\n"
         if let url = candidate.downloadURL { prompt += "Download URL: \(url)\n" }
-        if let content = contentExtractor.extractText(from: candidate.path, maxWords: 500) {
+        if let text = context.effectiveText {
+            prompt += "File content:\n\(text)\n"
+        } else if let content = contentExtractor.extractText(from: candidate.path, maxWords: 500) {
             prompt += "File content:\n\(content)\n"
+        }
+        if let sceneType = context.imageAnalysis?.sceneType {
+            prompt += "Image type: \(sceneType.rawValue)\n"
+        }
+        if let sourceCategory = context.downloadContext?.sourceCategory {
+            prompt += "Source: \(sourceCategory.rawValue)\n"
         }
         if !existingFolders.isEmpty {
             prompt += "\nExisting folders: \(existingFolders.joined(separator: ", "))\n"

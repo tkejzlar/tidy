@@ -4,17 +4,20 @@ import Foundation
 public struct PatternMatcher: Sendable {
     private let knowledgeBase: KnowledgeBase
 
-    private let extensionWeight: Double = 0.35
-    private let tokenWeight: Double = 0.30
-    private let sourceAppWeight: Double = 0.15
+    private let extensionWeight: Double = 0.25
+    private let tokenWeight: Double = 0.20
+    private let sceneTypeWeight: Double = 0.15
+    private let sourceDomainWeight: Double = 0.15
+    private let sourceAppWeight: Double = 0.10
     private let sizeBucketWeight: Double = 0.10
-    private let timeBucketWeight: Double = 0.10
+    private let timeBucketWeight: Double = 0.05
 
     public init(knowledgeBase: KnowledgeBase) {
         self.knowledgeBase = knowledgeBase
     }
 
-    public func score(_ candidate: FileCandidate) async throws -> [ScoredDestination] {
+    public func score(_ context: EnrichedFileContext) async throws -> [ScoredDestination] {
+        let candidate = context.candidate
         let allPatterns = try knowledgeBase.allPatterns()
         guard !allPatterns.isEmpty else { return [] }
 
@@ -36,6 +39,20 @@ public struct PatternMatcher: Sendable {
                     let overlap = Double(candidateSet.intersection(patternSet).count) / Double(patternSet.count)
                     featureScore += tokenWeight * overlap
                 }
+            }
+
+            // Scene type matching (from image analysis)
+            if let candidateSceneType = context.imageAnalysis?.sceneType.rawValue,
+               let patternSceneType = pattern.sceneType,
+               candidateSceneType == patternSceneType {
+                featureScore += sceneTypeWeight
+            }
+
+            // Source domain matching (category-based, not URL-based)
+            if let candidateSourceCategory = context.downloadContext?.sourceCategory.rawValue,
+               let patternSourceDomain = pattern.sourceDomain,
+               candidateSourceCategory == patternSourceDomain {
+                featureScore += sourceDomainWeight
             }
 
             if let candidateApp = candidate.sourceApp,
