@@ -486,13 +486,15 @@ final class AppState {
             let metadata = FileMetadataExtractor().extract(from: path)
             let candidate = FileCandidate(path: path, fileSize: fileSize, metadata: metadata)
 
-            // Determine folder role from source folder
-            let role = watchedFolders.first(where: { sourceFolder?.hasPrefix($0.url.path) == true })?.role ?? .inbox
+            // Determine folder role and per-folder ignore patterns from source folder
+            let matchedFolder = watchedFolders.first(where: { sourceFolder?.hasPrefix($0.url.path) == true })
+            let role = matchedFolder?.role ?? .inbox
+            let folderIgnorePatterns = matchedFolder?.ignorePatterns ?? []
 
             iconState = .processing
             defer { updateIconState() }
 
-            if let orchEvent = try? await orchestrator.processFile(candidate, folderRole: role) {
+            if let orchEvent = try? await orchestrator.processFile(candidate, folderRole: role, folderIgnorePatterns: folderIgnorePatterns) {
                 handleOrchestratorEvent(orchEvent)
             }
 

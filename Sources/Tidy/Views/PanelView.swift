@@ -44,7 +44,7 @@ struct PanelView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                                 Button("Cancel") {
-                                    // appState.cancelCleanup()
+                                    state.cancelCleanup()
                                 }
                                 .font(.caption)
                             }
