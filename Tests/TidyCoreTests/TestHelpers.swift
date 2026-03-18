@@ -78,6 +78,10 @@ func makeDate(timeIntervalSince1970: Double) -> Date {
     Date(timeIntervalSince1970: timeIntervalSince1970)
 }
 
+func makeHomeDirectory() -> String {
+    NSHomeDirectory()
+}
+
 /// Creates a minimal DOCX file at the given path containing the supplied text.
 func createMinimalDOCX(at path: String, text: String) throws {
     let tmpDir = NSTemporaryDirectory() + "docx-\(UUID().uuidString)"

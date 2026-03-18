@@ -156,6 +156,12 @@ public final class KnowledgeBase: Sendable {
         }
     }
 
+    public func updatePatternWeight(id: Int64, weight: Double) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE pattern_records SET weight = ? WHERE id = ?", arguments: [weight, id])
+        }
+    }
+
     public func allPatterns() throws -> [PatternRecord] {
         try dbQueue.read { db in
             try PatternRecord.fetchAll(db)
