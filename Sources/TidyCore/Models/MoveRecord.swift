@@ -15,6 +15,27 @@ public struct MoveRecord: Codable, Sendable, FetchableRecord, PersistableRecord 
 
     public static let databaseTableName = "move_records"
 
+    public init(
+        filename: String,
+        sourcePath: String,
+        destinationPath: String,
+        confidence: Int?,
+        wasAuto: Bool,
+        wasUndone: Bool,
+        batchId: String? = nil,
+        createdAt: Date
+    ) {
+        self.id = nil
+        self.filename = filename
+        self.sourcePath = sourcePath
+        self.destinationPath = destinationPath
+        self.confidence = confidence
+        self.wasAuto = wasAuto
+        self.wasUndone = wasUndone
+        self.batchId = batchId
+        self.createdAt = createdAt
+    }
+
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
     }

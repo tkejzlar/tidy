@@ -3,12 +3,17 @@ import TidyCore
 
 struct PanelView: View {
     @Bindable var state: AppState
+    @State private var showCleanupPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Tidy").font(.headline)
                 Spacer()
+                Button(action: { showCleanupPicker = true }) {
+                    Image(systemName: "sparkles")
+                        .help("Clean up a folder")
+                }.buttonStyle(.plain)
                 Button(action: { state.showSettings.toggle() }) {
                     Image(systemName: "gearshape")
                 }.buttonStyle(.plain)
@@ -26,6 +31,31 @@ struct PanelView: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
+                        // Cleanup progress indicator
+                        if state.isCleaningUp, let progress = state.cleanupProgress {
+                            HStack {
+                                ProgressView(value: Double(progress.current), total: Double(progress.total))
+                                Text("\(progress.current)/\(progress.total)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Button("Cancel") {
+                                    // appState.cancelCleanup()
+                                }
+                                .font(.caption)
+                            }
+                            .padding(.horizontal)
+                        }
+
+                        // Batch undo button
+                        if state.lastCleanupBatchId != nil {
+                            Button(action: {
+                                Task { await state.undoLastCleanup() }
+                            }) {
+                                Label("Undo Cleanup", systemImage: "arrow.uturn.backward")
+                            }
+                            .padding(.horizontal)
+                        }
+
                         if !state.suggestions.isEmpty {
                             HStack {
                                 Text("Suggestions")
@@ -38,6 +68,19 @@ struct PanelView: View {
                                 }
                             }
                             .padding(.horizontal)
+
+                            // Move All High-Confidence button
+                            if state.suggestions.count >= 3 {
+                                let highConfidence = state.suggestions.filter { $0.decision.confidence >= 80 }
+                                if !highConfidence.isEmpty {
+                                    Button(action: {
+                                        Task { await state.approveAllHighConfidence() }
+                                    }) {
+                                        Label("Move All High-Confidence (\(highConfidence.count))", systemImage: "checkmark.circle.fill")
+                                    }
+                                    .padding(.horizontal)
+                                }
+                            }
 
                             ForEach(state.suggestions) { suggestion in
                                 SuggestionCard(
@@ -82,5 +125,22 @@ struct PanelView: View {
             }
         }
         .frame(width: 360, height: 480)
+        .onChange(of: showCleanupPicker) { _, newValue in
+            guard newValue else { return }
+            showCleanupPicker = false
+            pickCleanupFolder()
+        }
+    }
+
+    private func pickCleanupFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose Folder to Clean Up"
+        if panel.runModal() == .OK, let url = panel.url {
+            let folder = WatchedFolder(url: url, role: .inbox)
+            state.addWatchedFolder(folder)
+        }
     }
 }

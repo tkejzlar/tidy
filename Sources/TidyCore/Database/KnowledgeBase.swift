@@ -128,7 +128,8 @@ public final class KnowledgeBase: Sendable {
         sourcePath: String,
         destinationPath: String,
         confidence: Int?,
-        wasAuto: Bool
+        wasAuto: Bool,
+        batchId: String? = nil
     ) throws {
         var record = MoveRecord(
             filename: filename,
@@ -137,10 +138,30 @@ public final class KnowledgeBase: Sendable {
             confidence: confidence,
             wasAuto: wasAuto,
             wasUndone: false,
+            batchId: batchId,
             createdAt: Date()
         )
         try dbQueue.write { db in
             try record.insert(db)
+        }
+    }
+
+    public func movesForBatch(_ batchId: String) throws -> [MoveRecord] {
+        try dbQueue.read { db in
+            try MoveRecord
+                .filter(Column("batchId") == batchId)
+                .order(Column("createdAt").desc)
+                .fetchAll(db)
+        }
+    }
+
+    public func undoableBatchMoves(_ batchId: String) throws -> [MoveRecord] {
+        try dbQueue.read { db in
+            try MoveRecord
+                .filter(Column("batchId") == batchId)
+                .filter(Column("wasUndone") == false)
+                .order(Column("createdAt").desc)
+                .fetchAll(db)
         }
     }
 

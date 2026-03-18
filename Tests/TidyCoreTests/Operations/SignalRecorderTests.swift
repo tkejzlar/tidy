@@ -39,4 +39,24 @@ struct SignalRecorderTests {
         #expect(patterns.count == 1)
         #expect(patterns[0].signalType == .confirmation)
     }
+
+    @Test("records observation with enriched context fields")
+    func recordEnrichedObservation() throws {
+        let kb = try KnowledgeBase.inMemory()
+        let recorder = SignalRecorder(knowledgeBase: kb)
+        let candidate = FileCandidate(path: "/tmp/invoice.pdf", fileSize: 2048)
+        let context = EnrichedFileContext(
+            candidate: candidate,
+            extractedText: "Invoice from Acme",
+            downloadContext: DownloadContext(
+                sourceURL: makeURL(string: "https://mail.google.com/attachment"),
+                sourceCategory: .email
+            )
+        )
+        try recorder.recordObservation(context: context, destination: "/Users/test/Documents/Invoices")
+        let patterns = try kb.allPatterns()
+        #expect(patterns.count == 1)
+        #expect(patterns[0].sourceDomain == "email")
+        #expect(patterns[0].sourceFolder == "/tmp")
+    }
 }

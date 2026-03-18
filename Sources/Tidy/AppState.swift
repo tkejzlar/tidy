@@ -32,9 +32,35 @@ final class AppState {
         didSet { Task { await orchestrator?.setPaused(isPaused) } }
     }
     var showSettings: Bool = false
-    var watchPath: String = "~/Downloads" {
-        didSet { UserDefaults.standard.set(watchPath, forKey: "watchPath") }
+
+    // Multi-folder watching (replaces single watchPath)
+    var watchedFolders: [WatchedFolder] = []
+
+    /// Backward-compatible computed property — returns the first inbox folder's path (tilde-abbreviated), or ~/Downloads.
+    var watchPath: String {
+        get {
+            if let first = watchedFolders.first(where: { $0.role == .inbox }) {
+                return first.url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+            }
+            return "~/Downloads"
+        }
+        set {
+            let expandedPath = NSString(string: newValue).expandingTildeInPath
+            let url = URL(fileURLWithPath: expandedPath)
+            if let idx = watchedFolders.firstIndex(where: { $0.role == .inbox }) {
+                watchedFolders[idx] = WatchedFolder(
+                    url: url, role: .inbox,
+                    isEnabled: watchedFolders[idx].isEnabled,
+                    ignorePatterns: watchedFolders[idx].ignorePatterns
+                )
+            } else {
+                watchedFolders.insert(WatchedFolder(url: url, role: .inbox), at: 0)
+            }
+            saveWatchedFolders()
+            restartFileWatcher()
+        }
     }
+
     var autoMoveThreshold: Double = 80 {
         didSet { UserDefaults.standard.set(autoMoveThreshold, forKey: "autoMoveThreshold") }
     }
@@ -60,6 +86,12 @@ final class AppState {
         didSet { UserDefaults.standard.set(dropboxSyncPath, forKey: "dropboxSyncPath") }
     }
 
+    // Bulk cleanup state
+    private var bulkCleanupEngine: BulkCleanupEngine?
+    var isCleaningUp: Bool = false
+    var cleanupProgress: (current: Int, total: Int)?
+    var lastCleanupBatchId: String?
+
     private var orchestrator: MoveOrchestrator?
     private var pipeline: ContentIntelligencePipeline?
     private var fileWatcher: FileWatcher?
@@ -67,7 +99,6 @@ final class AppState {
 
     func start() async {
         // Load saved settings
-        watchPath = UserDefaults.standard.string(forKey: "watchPath") ?? "~/Downloads"
         autoMoveThreshold = UserDefaults.standard.object(forKey: "autoMoveThreshold") as? Double ?? 80
         suggestThreshold = UserDefaults.standard.object(forKey: "suggestThreshold") as? Double ?? 50
         settleTime = UserDefaults.standard.object(forKey: "settleTime") as? Double ?? 5
@@ -75,11 +106,12 @@ final class AppState {
         soundOnAutoMove = UserDefaults.standard.bool(forKey: "soundOnAutoMove")
         dropboxSyncPath = UserDefaults.standard.string(forKey: "dropboxSyncPath") ?? "~/Dropbox"
 
+        // Migrate from single watchPath to watchedFolders (or load existing)
+        loadWatchedFolders()
+
         loadPinnedRules()
 
         do {
-            let expandedPath = NSString(string: watchPath).expandingTildeInPath
-
             // Use configurable dropbox sync path for DB location
             let syncPath = NSString(string: dropboxSyncPath).expandingTildeInPath
             let dbPath: String
@@ -118,7 +150,16 @@ final class AppState {
             )
             self.orchestrator = orch
 
-            let watcher = FileWatcher(watchPath: expandedPath)
+            // Create BulkCleanupEngine (needs ScoringEngine + UndoLog)
+            let undoLog = UndoLog(knowledgeBase: kb)
+            self.bulkCleanupEngine = BulkCleanupEngine(
+                scoringEngine: engine, pipeline: pipeline, undoLog: undoLog
+            )
+
+            // Create FileWatcher with all enabled folder paths
+            let paths = watchedFolders.filter(\.isEnabled).map(\.url.path)
+            guard !paths.isEmpty else { return }
+            let watcher = FileWatcher(paths: paths)
             self.fileWatcher = watcher
             watcher.start()
 
@@ -184,6 +225,130 @@ final class AppState {
         for s in current { approve(s) }
     }
 
+    func approveAllHighConfidence() async {
+        let highConfidence = suggestions.filter { $0.decision.confidence >= 80 }
+        for s in highConfidence { approve(s) }
+    }
+
+    // MARK: - Watched Folder Management
+
+    func addWatchedFolder(_ folder: WatchedFolder) {
+        guard !watchedFolders.contains(where: { $0.id == folder.id }) else { return }
+        watchedFolders.append(folder)
+        saveWatchedFolders()
+        restartFileWatcher()
+    }
+
+    func removeWatchedFolder(at index: Int) {
+        guard watchedFolders.indices.contains(index) else { return }
+        watchedFolders.remove(at: index)
+        saveWatchedFolders()
+        restartFileWatcher()
+    }
+
+    func updateWatchedFolder(at index: Int, _ folder: WatchedFolder) {
+        guard watchedFolders.indices.contains(index) else { return }
+        watchedFolders[index] = folder
+        saveWatchedFolders()
+        restartFileWatcher()
+    }
+
+    private func saveWatchedFolders() {
+        if let data = try? JSONEncoder().encode(watchedFolders) {
+            UserDefaults.standard.set(data, forKey: "watchedFolders")
+        }
+    }
+
+    private func loadWatchedFolders() {
+        // Try loading new multi-folder format first
+        if let data = UserDefaults.standard.data(forKey: "watchedFolders"),
+           let folders = try? JSONDecoder().decode([WatchedFolder].self, from: data),
+           !folders.isEmpty {
+            watchedFolders = folders
+            return
+        }
+
+        // Migrate from legacy single watchPath
+        if let legacyPath = UserDefaults.standard.string(forKey: "watchPath") {
+            let expandedPath = NSString(string: legacyPath).expandingTildeInPath
+            let url = URL(fileURLWithPath: expandedPath)
+            watchedFolders = [WatchedFolder(url: url, role: .inbox)]
+            saveWatchedFolders()
+            UserDefaults.standard.removeObject(forKey: "watchPath")
+            return
+        }
+
+        // Default to ~/Downloads with .inbox role
+        let downloadsPath = NSString(string: "~/Downloads").expandingTildeInPath
+        let url = URL(fileURLWithPath: downloadsPath)
+        watchedFolders = [WatchedFolder(url: url, role: .inbox)]
+        saveWatchedFolders()
+    }
+
+    private func restartFileWatcher() {
+        fileWatcher?.stop()
+        watchTask?.cancel()
+
+        let paths = watchedFolders.filter(\.isEnabled).map(\.url.path)
+        guard !paths.isEmpty else { return }
+        let watcher = FileWatcher(paths: paths)
+        self.fileWatcher = watcher
+        watcher.start()
+
+        watchTask = Task { [weak self] in
+            for await event in watcher.events {
+                await self?.handleFileEvent(event)
+            }
+        }
+    }
+
+    // MARK: - Bulk Cleanup
+
+    func startCleanup(folder: URL) async {
+        guard let engine = bulkCleanupEngine else { return }
+        isCleaningUp = true
+        cleanupProgress = nil
+
+        do {
+            let result = try await engine.scan(folder: folder) { [weak self] progress in
+                Task { @MainActor in
+                    switch progress {
+                    case .scanning(let current, let total):
+                        self?.cleanupProgress = (current, total)
+                    case .scoring(let current, let total):
+                        self?.cleanupProgress = (current, total)
+                    case .complete(_):
+                        self?.isCleaningUp = false
+                    }
+                }
+            }
+            lastCleanupBatchId = result.batchId
+            // Add proposed moves as suggestions
+            for move in result.proposed {
+                suggestions.append(Suggestion(
+                    candidate: move.candidate,
+                    context: move.context,
+                    decision: move.decision
+                ))
+            }
+            updateIconState()
+        } catch {
+            isCleaningUp = false
+        }
+    }
+
+    func undoLastCleanup() async {
+        guard lastCleanupBatchId != nil else { return }
+        // Undo all moves from the last cleanup batch via orchestrator
+        guard let orchestrator else { return }
+        while let undone = try? await orchestrator.undoLastMove() {
+            recentMoves.removeAll { $0.id == undone.id }
+            movedTodayCount = max(0, movedTodayCount - 1)
+        }
+        lastCleanupBatchId = nil
+        updateIconState()
+    }
+
     func undoLastMove() {
         guard let orchestrator else { return }
         Task {
@@ -238,22 +403,45 @@ final class AppState {
     private func handleFileEvent(_ event: FileEvent) async {
         guard let orchestrator else { return }
         switch event {
-        case .created(let path), .modified(let path):
+        case .created(let path, let sourceFolder), .modified(let path, let sourceFolder):
             let attrs = try? FileManager.default.attributesOfItem(atPath: path)
             let fileSize = attrs?[.size] as? UInt64 ?? 0
             let metadata = FileMetadataExtractor().extract(from: path)
             let candidate = FileCandidate(path: path, fileSize: fileSize, metadata: metadata)
 
+            // Determine folder role from source folder
+            let role = watchedFolders.first(where: { sourceFolder?.hasPrefix($0.url.path) == true })?.role ?? .inbox
+
             iconState = .processing
             defer { updateIconState() }
 
-            if let orchEvent = try? await orchestrator.processFile(candidate) {
+            if let orchEvent = try? await orchestrator.processFile(candidate, folderRole: role) {
                 handleOrchestratorEvent(orchEvent)
             }
 
-        case .movedOut(let path):
+        case .movedOut(let path, _):
             let filename = (path as NSString).lastPathComponent
             _ = try? await orchestrator.recordUserMove(filename: filename, fileSize: 0, destination: "unknown")
+
+        case .renamed(let oldPath, let newPath, let sourceFolder):
+            let filename = (newPath as NSString).lastPathComponent
+            let destination = (newPath as NSString).deletingLastPathComponent
+            let attrs = try? FileManager.default.attributesOfItem(atPath: newPath)
+            let fileSize = attrs?[.size] as? UInt64 ?? 0
+
+            // For watch-only folders, record as a learned move instead of a user move
+            let role = watchedFolders.first(where: { sourceFolder?.hasPrefix($0.url.path) == true })?.role ?? .inbox
+            if role == .watchOnly {
+                if let orchEvent = try? await orchestrator.recordWatchOnlyMove(
+                    filename: filename,
+                    source: (oldPath as NSString).deletingLastPathComponent,
+                    destination: destination
+                ) {
+                    handleOrchestratorEvent(orchEvent)
+                }
+            } else {
+                _ = try? await orchestrator.recordUserMove(filename: filename, fileSize: fileSize, destination: destination)
+            }
 
         case .removed:
             break
@@ -302,9 +490,13 @@ final class AppState {
     }
 
     private func updateCounts() {
-        let path = NSString(string: watchPath).expandingTildeInPath
-        let contents = (try? FileManager.default.contentsOfDirectory(atPath: path)) ?? []
-        unsortedCount = contents.filter { !$0.hasPrefix(".") }.count
+        // Count unsorted files across all enabled inbox folders
+        var total = 0
+        for folder in watchedFolders where folder.role == .inbox && folder.isEnabled {
+            let contents = (try? FileManager.default.contentsOfDirectory(atPath: folder.url.path)) ?? []
+            total += contents.filter { !$0.hasPrefix(".") }.count
+        }
+        unsortedCount = total
     }
 }
 

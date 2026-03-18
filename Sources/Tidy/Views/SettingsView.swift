@@ -10,15 +10,63 @@ struct SettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                LabeledContent("Watch folder") {
-                    HStack {
-                        Text(state.watchPath)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Button(action: pickWatchFolder) {
+                // MARK: - Watched Folders
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Watched Folders").font(.system(size: 12, weight: .semibold))
+
+                    ForEach(Array(state.watchedFolders.enumerated()), id: \.element.id) { index, folder in
+                        HStack {
                             Image(systemName: "folder")
+                                .foregroundColor(.secondary)
+
+                            VStack(alignment: .leading) {
+                                Text(folder.url.lastPathComponent)
+                                    .font(.body)
+                                Text(folder.url.path)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+
+                            Spacer()
+
+                            Picker("", selection: Binding(
+                                get: { folder.role },
+                                set: { newRole in
+                                    var updated = folder
+                                    updated.role = newRole
+                                    state.updateWatchedFolder(at: index, updated)
+                                }
+                            )) {
+                                Text("Inbox").tag(FolderRole.inbox)
+                                Text("Archive").tag(FolderRole.archive)
+                                Text("Watch Only").tag(FolderRole.watchOnly)
+                            }
+                            .frame(width: 110)
+
+                            Toggle("", isOn: Binding(
+                                get: { folder.isEnabled },
+                                set: { newValue in
+                                    var updated = folder
+                                    updated.isEnabled = newValue
+                                    state.updateWatchedFolder(at: index, updated)
+                                }
+                            ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+
+                            Button(action: { state.removeWatchedFolder(at: index) }) {
+                                Image(systemName: "minus.circle")
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.vertical, 2)
+                    }
+
+                    Button(action: pickAndAddFolder) {
+                        Label("Add Folder", systemImage: "plus")
                     }
                 }
 
@@ -136,14 +184,14 @@ struct SettingsView: View {
         .font(.system(size: 12))
     }
 
-    private func pickWatchFolder() {
+    private func pickAndAddFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.directoryURL = URL(fileURLWithPath: NSString(string: state.watchPath).expandingTildeInPath)
         if panel.runModal() == .OK, let url = panel.url {
-            state.watchPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+            let folder = WatchedFolder(url: url, role: .inbox)
+            state.addWatchedFolder(folder)
         }
     }
 

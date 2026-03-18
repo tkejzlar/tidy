@@ -9,13 +9,24 @@ public struct UndoLog: Sendable {
 
     public func recordMove(
         filename: String, sourcePath: String, destinationPath: String,
-        confidence: Int?, wasAuto: Bool
+        confidence: Int?, wasAuto: Bool, batchId: String? = nil
     ) throws {
         try knowledgeBase.recordMove(
             filename: filename, sourcePath: sourcePath, destinationPath: destinationPath,
-            confidence: confidence, wasAuto: wasAuto
+            confidence: confidence, wasAuto: wasAuto, batchId: batchId
         )
         try knowledgeBase.pruneOldMoves(keepLast: Self.maxEntries)
+    }
+
+    public func undoBatch(_ batchId: String) throws -> [MoveRecord] {
+        let moves = try knowledgeBase.undoableBatchMoves(batchId)
+        for move in moves {
+            guard let id = move.id else { continue }
+            if FileManager.default.fileExists(atPath: move.destinationPath) {
+                try knowledgeBase.markMoveUndone(id: id)
+            }
+        }
+        return moves
     }
 
     public func recentMoves(limit: Int) throws -> [MoveRecord] {

@@ -31,4 +31,37 @@ struct IgnoreFilterTests {
     func notTempSubstring() {
         #expect(filter.shouldIgnore(filename: "contemporary-art.pdf") == false)
     }
+
+    @Test("matches extension pattern")
+    func extensionPattern() {
+        #expect(filter.matchesIgnorePattern(filename: "debug.log", patterns: ["*.log"]))
+        #expect(!filter.matchesIgnorePattern(filename: "readme.md", patterns: ["*.log"]))
+    }
+
+    @Test("matches prefix pattern")
+    func prefixPattern() {
+        #expect(filter.matchesIgnorePattern(filename: "temp_file.txt", patterns: ["temp*"]))
+        #expect(!filter.matchesIgnorePattern(filename: "important.txt", patterns: ["temp*"]))
+    }
+
+    @Test("matches exact pattern")
+    func exactPattern() {
+        #expect(filter.matchesIgnorePattern(filename: "Thumbs.db", patterns: ["thumbs.db"]))
+        #expect(!filter.matchesIgnorePattern(filename: "other.db", patterns: ["thumbs.db"]))
+    }
+
+    @Test("combined check uses both standard and folder patterns")
+    func combinedCheck() {
+        // Standard ignore (dotfile)
+        #expect(filter.shouldIgnore(filename: ".hidden", folderPatterns: []))
+        // Folder pattern
+        #expect(filter.shouldIgnore(filename: "debug.log", folderPatterns: ["*.log"]))
+        // Neither
+        #expect(!filter.shouldIgnore(filename: "report.pdf", folderPatterns: ["*.log"]))
+    }
+
+    @Test("empty patterns matches nothing")
+    func emptyPatterns() {
+        #expect(!filter.matchesIgnorePattern(filename: "anything.txt", patterns: []))
+    }
 }
