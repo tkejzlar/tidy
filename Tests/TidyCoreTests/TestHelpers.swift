@@ -36,3 +36,7 @@ func makeTempFilePath(prefix: String, extension ext: String) -> String {
 func writeText(_ text: String, toFile path: String) throws {
     try (text as NSString).write(toFile: path, atomically: true, encoding: String.Encoding.utf8.rawValue)
 }
+
+func makeURL(string: String) -> URL {
+    URL(string: string)!
+}
