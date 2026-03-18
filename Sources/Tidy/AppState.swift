@@ -530,11 +530,12 @@ final class AppState {
     }
 
     func requestNotificationPermission() {
+        guard Bundle.main.bundleIdentifier != nil else { return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
     private func sendAutoMoveNotification(filename: String, destination: String) {
-        guard showNotifications else { return }
+        guard showNotifications, Bundle.main.bundleIdentifier != nil else { return }
         let content = UNMutableNotificationContent()
         content.title = "Tidy"
         content.body = "Moved \(filename) → \((destination as NSString).lastPathComponent)"
