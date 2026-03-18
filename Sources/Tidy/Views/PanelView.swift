@@ -3,14 +3,12 @@ import TidyCore
 
 struct PanelView: View {
     @Bindable var state: AppState
-    @State private var showCleanupPicker = false
-
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Tidy").font(.headline)
                 Spacer()
-                Button(action: { showCleanupPicker = true }) {
+                Button(action: pickCleanupFolder) {
                     Image(systemName: "sparkles")
                         .help("Clean up a folder")
                 }.buttonStyle(.plain)
@@ -125,11 +123,6 @@ struct PanelView: View {
             }
         }
         .frame(width: 360, height: 480)
-        .onChange(of: showCleanupPicker) { _, newValue in
-            guard newValue else { return }
-            showCleanupPicker = false
-            pickCleanupFolder()
-        }
     }
 
     private func pickCleanupFolder() {
