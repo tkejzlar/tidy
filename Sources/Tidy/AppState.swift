@@ -20,6 +20,7 @@ final class AppState {
     struct Suggestion: Identifiable {
         let id = UUID()
         let candidate: FileCandidate
+        let context: EnrichedFileContext
         let decision: RoutingDecision
     }
 
@@ -60,6 +61,7 @@ final class AppState {
     }
 
     private var orchestrator: MoveOrchestrator?
+    private var pipeline: ContentIntelligencePipeline?
     private var fileWatcher: FileWatcher?
     private var watchTask: Task<Void, Never>?
 
@@ -108,8 +110,11 @@ final class AppState {
             let heuristics = HeuristicsEngine(affinities: affinities, clusters: clusters)
             let engine = try ScoringEngine(knowledgeBase: kb, heuristicsEngine: heuristics)
 
+            let pipeline = ContentIntelligencePipeline()
+            self.pipeline = pipeline
+
             let orch = MoveOrchestrator(
-                scoringEngine: engine, knowledgeBase: kb, settleSeconds: settleTime
+                scoringEngine: engine, knowledgeBase: kb, pipeline: pipeline, settleSeconds: settleTime
             )
             self.orchestrator = orch
 
@@ -133,7 +138,7 @@ final class AppState {
         Task {
             do {
                 let move = try await orchestrator.approveSuggestion(
-                    candidate: suggestion.candidate, destination: suggestion.decision.destination
+                    context: suggestion.context, destination: suggestion.decision.destination
                 )
                 suggestions.removeAll { $0.id == suggestion.id }
                 recentMoves.insert(move, at: 0)
@@ -160,7 +165,7 @@ final class AppState {
             Task {
                 do {
                     let move = try await orchestrator.redirect(
-                        candidate: suggestion.candidate,
+                        context: suggestion.context,
                         suggestedDestination: suggestion.decision.destination,
                         chosenDestination: url.path
                     )
@@ -263,7 +268,8 @@ final class AppState {
             movedTodayCount += 1
             sendAutoMoveNotification(filename: move.filename, destination: move.destinationPath)
         case .suggested(let candidate, let decision):
-            suggestions.append(Suggestion(candidate: candidate, decision: decision))
+            let context = EnrichedFileContext(candidate: candidate)
+            suggestions.append(Suggestion(candidate: candidate, context: context, decision: decision))
         case .newFile:
             break // Could track unsorted count
         case .undone(let move):
