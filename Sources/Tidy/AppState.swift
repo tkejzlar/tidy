@@ -2,11 +2,13 @@ import SwiftUI
 import TidyCore
 import UserNotifications
 import ServiceManagement
+import os
 
 @Observable
 @MainActor
 final class AppState {
     enum IconState { case idle, hasSuggestions, processing }
+    private static let logger = Logger(subsystem: "com.tidy.app", category: "AppState")
     var iconState: IconState = .idle
 
     var iconName: String {
@@ -95,6 +97,8 @@ final class AppState {
     // Sync
     public var syncBackend: SyncBackend = .local
     private var syncManager: SyncManager?
+    private var syncWatcher: SyncDirectoryWatcher?
+    private var syncImportScheduled = false
     private(set) var knowledgeBase: KnowledgeBase?
 
     private var orchestrator: MoveOrchestrator?
@@ -185,7 +189,9 @@ final class AppState {
 
             recentMoves = try kb.recentMoves(limit: 20)
             updateCounts()
-        } catch { }
+        } catch {
+            Self.logger.error("Failed to start: \(error.localizedDescription)")
+        }
     }
 
     func approve(_ suggestion: Suggestion) {
@@ -200,7 +206,9 @@ final class AppState {
                 if recentMoves.count > 20 { recentMoves = Array(recentMoves.prefix(20)) }
                 movedTodayCount += 1
                 updateIconState()
-            } catch { }
+            } catch {
+                Self.logger.error("Failed to approve suggestion: \(error.localizedDescription)")
+            }
         }
     }
 
@@ -347,7 +355,16 @@ final class AppState {
             }
             updateIconState()
         } catch {
+            Self.logger.error("Cleanup failed: \(error.localizedDescription)")
             isCleaningUp = false
+        }
+    }
+
+    func cancelCleanup() {
+        Task {
+            await bulkCleanupEngine?.cancel()
+            isCleaningUp = false
+            cleanupProgress = nil
         }
     }
 
@@ -402,7 +419,7 @@ final class AppState {
         do {
             let _ = try await syncManager.exportChanges(pinnedRules: pinnedRules)
         } catch {
-            // Silently fail for now
+            Self.logger.error("Sync export failed: \(error.localizedDescription)")
         }
     }
 
@@ -413,10 +430,10 @@ final class AppState {
             let (updatedRules, result) = try await syncManager.importChanges(pinnedRulesManager: rules)
             if result.patternsAdded > 0 || result.patternsUpdated > 0 || result.pinnedRulesUpdated > 0 {
                 pinnedRules = updatedRules.rules
-                // Could show notification here
+                sendSyncNotification(patternsAdded: result.patternsAdded, patternsUpdated: result.patternsUpdated, rulesUpdated: result.pinnedRulesUpdated)
             }
         } catch {
-            // Silently fail for now
+            Self.logger.error("Sync import failed: \(error.localizedDescription)")
         }
     }
 
@@ -455,7 +472,9 @@ final class AppState {
             } else {
                 try SMAppService.mainApp.unregister()
             }
-        } catch { }
+        } catch {
+            Self.logger.warning("Launch at login update failed: \(error.localizedDescription)")
+        }
     }
 
     private func handleFileEvent(_ event: FileEvent) async {
@@ -540,6 +559,19 @@ final class AppState {
         content.title = "Tidy"
         content.body = "Moved \(filename) → \((destination as NSString).lastPathComponent)"
         if soundOnAutoMove { content.sound = .default }
+        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    private func sendSyncNotification(patternsAdded: Int, patternsUpdated: Int, rulesUpdated: Int) {
+        guard showNotifications, Bundle.main.bundleIdentifier != nil else { return }
+        var parts: [String] = []
+        if patternsAdded > 0 { parts.append("\(patternsAdded) new patterns") }
+        if patternsUpdated > 0 { parts.append("\(patternsUpdated) updated patterns") }
+        if rulesUpdated > 0 { parts.append("\(rulesUpdated) updated rules") }
+        let content = UNMutableNotificationContent()
+        content.title = "Tidy Sync"
+        content.body = "Merged: " + parts.joined(separator: ", ")
         let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(request)
     }
