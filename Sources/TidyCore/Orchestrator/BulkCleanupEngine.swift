@@ -65,27 +65,16 @@ public actor BulkCleanupEngine {
             let fileSize = (attrs?[.size] as? UInt64) ?? 0
             let candidate = FileCandidate(path: path, fileSize: fileSize)
 
-            // Lightweight enrichment for bulk: text + download context only, skip Vision
-            // (Vision is too slow for 1000+ files)
-            let contentExtractor = ContentExtractor()
+            // Bulk mode: skip all expensive enrichment (Vision, text extraction, subprocess calls).
+            // Route based on filename, extension, metadata, and download xattrs only.
             let downloadExtractor = DownloadContextExtractor()
-
-            var extractedText: String? = nil
-            if let ext = candidate.fileExtension, ContentExtractor.isTextExtractable(extension: ext) {
-                extractedText = contentExtractor.extractText(from: candidate.path)
-            }
-
             var dlContext = downloadExtractor.extract(fromPath: candidate.path)
             if dlContext.sourceCategory == .unknown, let url = candidate.downloadURL {
                 dlContext = downloadExtractor.contextFromURL(url)
             }
             let finalDlContext = (dlContext.sourceCategory == .unknown && dlContext.sourceURL == nil) ? nil : dlContext
 
-            let context = EnrichedFileContext(
-                candidate: candidate,
-                extractedText: extractedText,
-                downloadContext: finalDlContext
-            )
+            let context = EnrichedFileContext(candidate: candidate, downloadContext: finalDlContext)
 
             guard let decision = try await scoringEngine.route(context) else { continue }
 
