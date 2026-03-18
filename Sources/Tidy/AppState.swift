@@ -101,6 +101,10 @@ final class AppState {
     private var syncImportScheduled = false
     private(set) var knowledgeBase: KnowledgeBase?
 
+    // Rule pack import preview
+    var importPreviewPack: RulePack?
+    var importPreviewPath: String?
+
     private var orchestrator: MoveOrchestrator?
     private var pipeline: ContentIntelligencePipeline?
     private var fileWatcher: FileWatcher?

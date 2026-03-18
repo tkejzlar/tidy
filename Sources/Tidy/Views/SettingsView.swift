@@ -226,17 +226,8 @@ struct SettingsView: View {
                         Button("Import Rules") {
                             FolderPicker.pickFile(prompt: "Import Rule Pack") { url in
                                 if let pack = try? state.importRulePack(from: url.path) {
-                                    let manager = RulePackManager()
-                                    var rulesManager = PinnedRulesManager(rules: state.pinnedRules)
-                                    if let kb = state.knowledgeBase {
-                                        let _ = try? manager.applyImport(
-                                            pack: pack,
-                                            acceptedRuleExtensions: Set(pack.pinnedRules.map { $0.fileExtension.lowercased() }),
-                                            knowledgeBase: kb,
-                                            pinnedRulesManager: &rulesManager
-                                        )
-                                        state.pinnedRules = rulesManager.rules
-                                    }
+                                    state.importPreviewPath = url.path
+                                    state.importPreviewPack = pack
                                 }
                             }
                         }
@@ -262,6 +253,14 @@ struct SettingsView: View {
             .padding()
         }
         .font(.system(size: 12))
+        .overlay {
+            if let pack = state.importPreviewPack {
+                Color.black.opacity(0.3)
+                    .ignoresSafeArea()
+                RulePackPreviewView(state: state, pack: pack)
+                    .padding(16)
+            }
+        }
     }
 
 }
