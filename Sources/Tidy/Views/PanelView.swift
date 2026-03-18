@@ -15,9 +15,12 @@ struct PanelView: View {
                             Task { await state.startCleanup(folder: folder.url) }
                         }
                     }
-                    if state.watchedFolders.isEmpty {
-                        Text("Add folders in Settings")
-                            .foregroundStyle(.secondary)
+                    Divider()
+                    Button("Other Folder...") {
+                        let appState = state
+                        FolderPicker.pick(prompt: "Clean Up", message: "Choose a folder to scan and organize") { url in
+                            Task { @MainActor in await appState.startCleanup(folder: url) }
+                        }
                     }
                 } label: {
                     Image(systemName: "sparkles")

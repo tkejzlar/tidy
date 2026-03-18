@@ -6,8 +6,6 @@ struct SettingsView: View {
     @State private var addingRule = false
     @State private var newRuleExt = ""
     @State private var newRuleDest = ""
-    @State private var addingFolder = false
-    @State private var newFolderPath = ""
 
     var body: some View {
         ScrollView {
@@ -67,29 +65,13 @@ struct SettingsView: View {
                         .padding(.vertical, 2)
                     }
 
-                    if addingFolder {
-                        HStack {
-                            TextField("~/Desktop", text: $newFolderPath)
-                                .textFieldStyle(.roundedBorder)
-                                .font(.caption)
-                            Button("Add") {
-                                let expanded = NSString(string: newFolderPath).expandingTildeInPath
-                                if FileManager.default.fileExists(atPath: expanded) {
-                                    let folder = WatchedFolder(url: URL(fileURLWithPath: expanded), role: .inbox)
-                                    state.addWatchedFolder(folder)
-                                    newFolderPath = ""
-                                    addingFolder = false
-                                }
-                            }.font(.caption)
-                            Button("Cancel") {
-                                newFolderPath = ""
-                                addingFolder = false
-                            }.font(.caption)
+                    Button(action: {
+                        FolderPicker.pick(prompt: "Add Folder") { url in
+                            let folder = WatchedFolder(url: url, role: .inbox)
+                            state.addWatchedFolder(folder)
                         }
-                    } else {
-                        Button(action: { addingFolder = true }) {
-                            Label("Add Folder", systemImage: "plus")
-                        }
+                    }) {
+                        Label("Add Folder", systemImage: "plus")
                     }
                 }
 
@@ -187,10 +169,17 @@ struct SettingsView: View {
                 Divider()
 
                 LabeledContent("Sync path") {
-                    TextField("~/Dropbox", text: $state.dropboxSyncPath)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.caption)
-                        .frame(width: 180)
+                    HStack {
+                        Text(state.dropboxSyncPath).font(.caption).foregroundStyle(.secondary)
+                            .lineLimit(1).truncationMode(.middle)
+                        Button(action: {
+                            FolderPicker.pick(prompt: "Choose Sync Folder") { url in
+                                state.dropboxSyncPath = url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~")
+                            }
+                        }) {
+                            Image(systemName: "folder").font(.caption)
+                        }.buttonStyle(.plain)
+                    }
                 }
 
                 Divider()
