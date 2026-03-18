@@ -23,10 +23,15 @@ public struct PatternRecord: Codable, Sendable, FetchableRecord, PersistableReco
     public var sourceApp: String?
     public var sizeBucket: String?
     public var timeBucket: String?
+    public var documentType: String?
+    public var sourceDomain: String?
+    public var sceneType: String?
+    public var sourceFolder: String?
     public var destination: String
     public var signalType: SignalType
     public var weight: Double
     public var createdAt: Date
+    public var syncedAt: Date?
 
     public static let databaseTableName = "pattern_records"
 

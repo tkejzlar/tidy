@@ -68,6 +68,31 @@ struct KnowledgeBaseTests {
         #expect(moves[0].wasAuto == true)
     }
 
+    @Test("v2 migration adds new columns and records with enriched fields")
+    func migrationV2() throws {
+        let kb = try KnowledgeBase.inMemory()
+        try kb.recordPattern(
+            extension: "pdf",
+            filenameTokens: ["invoice"],
+            sourceApp: "Safari",
+            sizeBucket: .medium,
+            timeBucket: .morning,
+            documentType: "invoice",
+            sourceDomain: "email",
+            sceneType: "document",
+            sourceFolder: "/Users/test/Downloads",
+            destination: "/Users/test/Documents/Invoices",
+            signalType: .observation
+        )
+        let patterns = try kb.allPatterns()
+        #expect(patterns.count >= 1)
+        let found = patterns.first(where: { $0.documentType == "invoice" })
+        #expect(found != nil)
+        #expect(found?.sourceDomain == "email")
+        #expect(found?.sceneType == "document")
+        #expect(found?.sourceFolder == "/Users/test/Downloads")
+    }
+
     @Test("totalMoveCount tracks history depth")
     func moveCount() throws {
         let kb = try KnowledgeBase.inMemory()

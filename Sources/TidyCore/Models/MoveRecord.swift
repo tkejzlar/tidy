@@ -11,6 +11,7 @@ public struct MoveRecord: Codable, Sendable, FetchableRecord, PersistableRecord 
     public var wasAuto: Bool
     public var wasUndone: Bool
     public var createdAt: Date
+    public var batchId: String?
 
     public static let databaseTableName = "move_records"
 

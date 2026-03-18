@@ -47,6 +47,18 @@ public final class KnowledgeBase: Sendable {
                 t.column("createdAt", .datetime).notNull().defaults(sql: "CURRENT_TIMESTAMP")
             }
         }
+        migrator.registerMigration("v2") { db in
+            try db.alter(table: "pattern_records") { t in
+                t.add(column: "documentType", .text)
+                t.add(column: "sourceDomain", .text)
+                t.add(column: "sceneType", .text)
+                t.add(column: "sourceFolder", .text)
+                t.add(column: "syncedAt", .double)
+            }
+            try db.alter(table: "move_records") { t in
+                t.add(column: "batchId", .text)
+            }
+        }
         try migrator.migrate(dbQueue)
     }
 
@@ -58,6 +70,10 @@ public final class KnowledgeBase: Sendable {
         sourceApp: String?,
         sizeBucket: SizeBucket?,
         timeBucket: TimeBucket?,
+        documentType: String? = nil,
+        sourceDomain: String? = nil,
+        sceneType: String? = nil,
+        sourceFolder: String? = nil,
         destination: String,
         signalType: SignalType
     ) throws {
@@ -70,10 +86,15 @@ public final class KnowledgeBase: Sendable {
             sourceApp: sourceApp,
             sizeBucket: sizeBucket?.rawValue,
             timeBucket: timeBucket?.rawValue,
+            documentType: documentType,
+            sourceDomain: sourceDomain,
+            sceneType: sceneType,
+            sourceFolder: sourceFolder,
             destination: destination,
             signalType: signalType,
             weight: signalType.defaultWeight,
-            createdAt: Date()
+            createdAt: Date(),
+            syncedAt: nil
         )
         try dbQueue.write { db in
             try record.insert(db)
