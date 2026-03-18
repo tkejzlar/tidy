@@ -94,7 +94,7 @@ struct PanelView: View {
                                     suggestions: autoMoveSuggestions,
                                     accentColor: .green,
                                     batchActionTitle: "Move All",
-                                    batchAction: { for s in autoMoveSuggestions { state.approve(s) } }
+                                    showBatchAction: true
                                 )
                             }
 
@@ -105,7 +105,7 @@ struct PanelView: View {
                                     suggestions: suggestSuggestions,
                                     accentColor: .blue,
                                     batchActionTitle: "Move All",
-                                    batchAction: { for s in suggestSuggestions { state.approve(s) } }
+                                    showBatchAction: true
                                 )
                             }
 
@@ -115,8 +115,7 @@ struct PanelView: View {
                                     title: "Needs Review",
                                     suggestions: askSuggestions,
                                     accentColor: .orange,
-                                    batchActionTitle: nil,
-                                    batchAction: nil
+                                    batchActionTitle: nil
                                 )
                             }
                         }
@@ -162,7 +161,7 @@ struct PanelView: View {
         suggestions: [AppState.Suggestion],
         accentColor: Color,
         batchActionTitle: String?,
-        batchAction: (() -> Void)? = nil
+        showBatchAction: Bool = false
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
@@ -170,11 +169,14 @@ struct PanelView: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(accentColor)
                 Spacer()
-                if let title = batchActionTitle, let action = batchAction {
-                    Button(title, action: action)
-                        .font(.caption)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(accentColor)
+                if showBatchAction, let actionTitle = batchActionTitle {
+                    Button(actionTitle) {
+                        let toApprove = suggestions
+                        for s in toApprove { state.approve(s) }
+                    }
+                    .font(.caption)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(accentColor)
                 }
             }
             .padding(.horizontal)
