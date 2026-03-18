@@ -1,17 +1,32 @@
 import SwiftUI
 import TidyCore
+import UniformTypeIdentifiers
 
 struct PanelView: View {
     @Bindable var state: AppState
+    @State private var showCleanupMenu = false
+    @State private var showFilePicker = false
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
                 Text("Tidy").font(.headline)
                 Spacer()
-                Button(action: pickCleanupFolder) {
+                Menu {
+                    // Quick-clean watched folders
+                    ForEach(state.watchedFolders) { folder in
+                        Button(folder.url.lastPathComponent) {
+                            Task { await state.startCleanup(folder: folder.url) }
+                        }
+                    }
+                    Divider()
+                    Button("Browse...") {
+                        showFilePicker = true
+                    }
+                } label: {
                     Image(systemName: "sparkles")
                         .help("Clean up a folder")
-                }.buttonStyle(.plain)
+                }.menuStyle(.borderlessButton)
                 Button(action: { state.showSettings.toggle() }) {
                     Image(systemName: "gearshape")
                 }.buttonStyle(.plain)
@@ -123,35 +138,13 @@ struct PanelView: View {
             }
         }
         .frame(width: 360, height: 480)
-    }
-
-    private func pickCleanupFolder() {
-        // MenuBarExtra panels have hidesOnDeactivate — we must prevent
-        // the panel from stealing focus back from NSOpenPanel.
-        // Temporarily disable hidesOnDeactivate on all windows.
-        let windows = NSApp.windows
-        let originalHides = windows.map { ($0, ($0 as? NSPanel)?.hidesOnDeactivate ?? false) }
-        for window in windows {
-            (window as? NSPanel)?.hidesOnDeactivate = false
-        }
-
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.allowsMultipleSelection = false
-        panel.prompt = "Clean Up"
-        panel.message = "Choose a folder to scan and organize"
-
-        let response = panel.runModal()
-
-        // Restore original hidesOnDeactivate
-        for (window, hides) in originalHides {
-            (window as? NSPanel)?.hidesOnDeactivate = hides
-        }
-
-        guard response == .OK, let url = panel.url else { return }
-        Task { @MainActor in
-            await state.startCleanup(folder: url)
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            Task { await state.startCleanup(folder: url) }
         }
     }
 }
