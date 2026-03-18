@@ -59,7 +59,54 @@ public final class KnowledgeBase: Sendable {
                 t.add(column: "batchId", .text)
             }
         }
+        migrator.registerMigration("v3") { db in
+            try db.create(table: "sync_metadata") { t in
+                t.column("deviceId", .text).primaryKey()
+                t.column("lastSyncTimestamp", .double)
+            }
+        }
         try migrator.migrate(dbQueue)
+    }
+
+    // MARK: - Sync
+
+    public func unsyncedPatterns() throws -> [PatternRecord] {
+        try dbQueue.read { db in
+            try PatternRecord
+                .filter(Column("syncedAt") == nil)
+                .fetchAll(db)
+        }
+    }
+
+    public func markPatternsSynced(ids: [Int64], at date: Date = Date()) throws {
+        try dbQueue.write { db in
+            for id in ids {
+                try db.execute(
+                    sql: "UPDATE pattern_records SET syncedAt = ? WHERE id = ?",
+                    arguments: [date.timeIntervalSince1970, id]
+                )
+            }
+        }
+    }
+
+    public func updateSyncTimestamp(deviceId: String, timestamp: Date) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "INSERT OR REPLACE INTO sync_metadata (deviceId, lastSyncTimestamp) VALUES (?, ?)",
+                arguments: [deviceId, timestamp.timeIntervalSince1970]
+            )
+        }
+    }
+
+    public func lastSyncTimestamp(deviceId: String) throws -> Date? {
+        try dbQueue.read { db in
+            let row = try Row.fetchOne(db,
+                sql: "SELECT lastSyncTimestamp FROM sync_metadata WHERE deviceId = ?",
+                arguments: [deviceId]
+            )
+            guard let timestamp = row?["lastSyncTimestamp"] as? Double else { return nil }
+            return Date(timeIntervalSince1970: timestamp)
+        }
     }
 
     // MARK: - Patterns

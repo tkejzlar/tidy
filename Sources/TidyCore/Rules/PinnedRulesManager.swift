@@ -39,7 +39,11 @@ public struct PinnedRulesManager: Sendable {
 
     public mutating func addRule(_ rule: PinnedRule) {
         rules.removeAll { $0.fileExtension.lowercased() == rule.fileExtension.lowercased() }
-        rules.append(rule)
+        var timestamped = rule
+        if timestamped.updatedAt == nil {
+            timestamped.updatedAt = Date()
+        }
+        rules.append(timestamped)
     }
 
     public mutating func removeRule(forExtension ext: String) {

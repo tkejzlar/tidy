@@ -54,4 +54,22 @@ struct PinnedRulesManagerTests {
         let loaded = try PinnedRulesManager.load(from: "/nonexistent/rules.json")
         #expect(loaded.rules.isEmpty)
     }
+
+    @Test("addRule sets updatedAt timestamp")
+    func addRuleSetsTimestamp() {
+        var manager = PinnedRulesManager()
+        let rule = PinnedRule(fileExtension: "pdf", destination: "/docs")
+        manager.addRule(rule)
+        let found = manager.rules.first(where: { $0.id == "pdf" })
+        #expect(found?.updatedAt != nil)
+    }
+
+    @Test("existing JSON without updatedAt decodes successfully")
+    func backwardCompatDecode() throws {
+        let json = "[{\"fileExtension\": \"pdf\", \"destination\": \"/docs\"}]"
+        let data = json.data(using: .utf8)!
+        let rules = try jsonDecode([PinnedRule].self, from: data)
+        #expect(rules.count == 1)
+        #expect(rules[0].updatedAt == nil)
+    }
 }

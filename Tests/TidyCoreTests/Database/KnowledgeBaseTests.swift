@@ -108,4 +108,39 @@ struct KnowledgeBaseTests {
         )
         #expect(try kb.totalMoveCount() == 2)
     }
+
+    @Test("v3 migration creates sync_metadata table")
+    func migrationV3() throws {
+        let kb = try KnowledgeBase.inMemory()
+        try kb.updateSyncTimestamp(deviceId: "test-device", timestamp: makeDate(timeIntervalSince1970: 1000000))
+        let ts = try kb.lastSyncTimestamp(deviceId: "test-device")
+        #expect(ts != nil)
+    }
+
+    @Test("unsyncedPatterns returns patterns without syncedAt")
+    func unsyncedPatterns() throws {
+        let kb = try KnowledgeBase.inMemory()
+        try kb.recordPattern(
+            extension: "pdf", filenameTokens: ["test"], sourceApp: nil,
+            sizeBucket: .medium, timeBucket: .morning,
+            destination: "/docs", signalType: .observation
+        )
+        let unsynced = try kb.unsyncedPatterns()
+        #expect(unsynced.count == 1)
+    }
+
+    @Test("markPatternsSynced updates syncedAt")
+    func markSynced() throws {
+        let kb = try KnowledgeBase.inMemory()
+        try kb.recordPattern(
+            extension: "pdf", filenameTokens: ["test"], sourceApp: nil,
+            sizeBucket: .medium, timeBucket: .morning,
+            destination: "/docs", signalType: .observation
+        )
+        let patterns = try kb.allPatterns()
+        let ids = patterns.compactMap(\.id)
+        try kb.markPatternsSynced(ids: ids)
+        let unsynced = try kb.unsyncedPatterns()
+        #expect(unsynced.isEmpty)
+    }
 }

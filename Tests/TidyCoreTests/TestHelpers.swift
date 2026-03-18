@@ -45,12 +45,37 @@ func makeFileURL(path: String) -> URL {
     URL(fileURLWithPath: path)
 }
 
+func makeTestUserDefaults() -> (defaults: UserDefaults, suiteName: String) {
+    let suiteName = "test-\(UUID().uuidString)"
+    return (UserDefaults(suiteName: suiteName)!, suiteName)
+}
+
+func cleanupTestUserDefaults(suiteName: String) {
+    UserDefaults.standard.removePersistentDomain(forName: suiteName)
+}
+
 func jsonEncode<T: Encodable>(_ value: T) throws -> Data {
     try JSONEncoder().encode(value)
 }
 
 func jsonDecode<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
     try JSONDecoder().decode(type, from: data)
+}
+
+func jsonEncodeISO8601<T: Encodable>(_ value: T) throws -> Data {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    return try encoder.encode(value)
+}
+
+func jsonDecodeISO8601<T: Decodable>(_ type: T.Type, from data: Data) throws -> T {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    return try decoder.decode(type, from: data)
+}
+
+func makeDate(timeIntervalSince1970: Double) -> Date {
+    Date(timeIntervalSince1970: timeIntervalSince1970)
 }
 
 /// Creates a minimal DOCX file at the given path containing the supplied text.
